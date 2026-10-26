@@ -21,34 +21,34 @@ const DEFAULT_PRESENCE = {
 
 const DEFAULT_ROUTING = {
   tip_alerts: {
-    enabled: true,
-    channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
+    enabled: false, // Live alert embeds disabled per user directive
+    channelId: '',
     minAmount: 0,
     color: '#10B981',
     mention: 'none',
     titleTemplate: '⚡ LIVE TIP ALERT: ₹{amount} for @{creator}!',
-    showProgressBar: true
+    showProgressBar: false
   },
   goal_celebrations: {
-    enabled: true,
-    channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
+    enabled: false, // Goal celebration channel alerts disabled
+    channelId: '',
     color: '#F59E0B',
-    mention: 'here',
+    mention: 'none',
     titleTemplate: '🎉 STREAM GOAL CRUSHED: @{creator} hit 100%!',
-    showCelebrationBanner: true
+    showCelebrationBanner: false
   },
   creator_onboarding: {
     enabled: true,
     channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
-    sendPublicAnnouncement: true,
+    sendPublicAnnouncement: false, // strictly personal DM
     sendPrivateCredentialsDM: true,
     color: '#00F0FF',
     mention: 'none',
-    titleTemplate: '🚀 Welcome @{creator} to the AuraTip Streamer Network!'
+    titleTemplate: '👑 Welcome @{creator} to the AuraTip Creator Network!'
   },
   creator_boosts: {
-    enabled: true,
-    channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
+    enabled: false,
+    channelId: '',
     color: '#8B5CF6',
     mention: 'none',
     titleTemplate: '🔥 STREAM BOOSTED: @{creator} is now spotlighted!'
@@ -410,14 +410,46 @@ class AuraTipDiscordBot {
     }
   }
 
-  // Register Discord Global Slash Commands
+  // Register Minimal & Required Global Slash Commands
   async registerSlashCommands() {
     if (!this.token) return;
     const appId = this.botUser?.id || process.env.DISCORD_CLIENT_ID || '1561385016766758973';
     const commands = [
       {
         name: 'ping',
-        description: 'Check AuraTip Bot latency and connection status'
+        description: 'Check AuraTip bot latency and gateway status'
+      },
+      {
+        name: 'streamer',
+        description: 'Look up a creator profile, tipping link, and active stream goal',
+        options: [
+          {
+            name: 'handle',
+            description: 'The creator handle (e.g. gr8ansh)',
+            type: 3, // STRING
+            required: true
+          }
+        ]
+      },
+      {
+        name: 'approve',
+        description: 'Approve a creator and automatically dispatch their onboarding DM embed',
+        options: [
+          {
+            name: 'handle',
+            description: 'Creator handle to approve (e.g. samayraina)',
+            type: 3, // STRING
+            required: true
+          }
+        ]
+      },
+      {
+        name: 'kingdom',
+        description: 'Get the official Se7en Kingdom Discord invite for creator discussions'
+      },
+      {
+        name: 'help',
+        description: 'View AuraTip bot commands and creator links'
       }
     ];
 
@@ -431,7 +463,7 @@ class AuraTipDiscordBot {
         body: JSON.stringify(commands)
       });
       if (res.ok) {
-        console.log('[AuraTip DC Bot] Streamlined commands registered successfully.');
+        console.log('[AuraTip DC Bot] Minimal required commands registered: /ping, /streamer, /approve, /kingdom, /help');
       }
     } catch (e) {
       console.warn('[AuraTip DC Bot] Slash commands notice:', e.message);
@@ -447,57 +479,33 @@ class AuraTipDiscordBot {
       let responsePayload = {};
 
       if (commandName === 'ping') {
+        const uptimeSec = this.startTime ? Math.round((Date.now() - this.startTime) / 1000) : 0;
+        const mins = Math.floor(uptimeSec / 60);
         responsePayload = {
           type: 4, // ChannelMessageWithSource
           data: {
             embeds: [{
-              title: "🏓 Pong!",
-              description: `**AuraTip Gateway v10:** Online\n**Heartbeat Latency:** \`${this.lastPing || 14}ms\`\n**Bot Status:** Healthy & Listening\n**Server Channel:** Connected`,
-              color: 0x06B6D4,
-              footer: { text: "AuraTip Stream Operations" },
-              timestamp: new Date().toISOString()
-            }]
-          }
-        };
-      } else if (commandName === 'status') {
-        const uptimeSec = this.startTime ? Math.round((Date.now() - this.startTime) / 1000) : 0;
-        const mins = Math.floor(uptimeSec / 60);
-
-        let creatorCount = 417;
-        let totalRaised = 0;
-        if (this.prisma) {
-          try {
-            creatorCount = await this.prisma.creator.count();
-            const agg = await this.prisma.tip.aggregate({
-              where: { status: 'PAID' },
-              _sum: { amountInrEquiv: true }
-            });
-            totalRaised = agg._sum?.amountInrEquiv || 0;
-          } catch (e) {}
-        }
-
-        responsePayload = {
-          type: 4,
-          data: {
-            embeds: [{
-              title: "⚡ AuraTip Platform & Bot Status",
-              description: "India's highest payout live streaming tipping platform with 60 FPS OBS alerts and direct UPI payouts.",
+              title: "🏓 AuraTip Bot — Status: Online",
+              description: "AuraTip live integration bot is online & connected to Discord Gateway.",
               fields: [
-                { name: "Bot Latency", value: `\`${this.lastPing || 12}ms\``, inline: true },
+                { name: "Gateway Latency", value: `\`${this.lastPing || 14}ms\``, inline: true },
                 { name: "Bot Uptime", value: `\`${mins}m (${uptimeSec}s)\``, inline: true },
-                { name: "Active Gateway", value: "`REST v10 + Gateway`", inline: true },
-                { name: "Creator Fleet", value: `\`${creatorCount} Streamers\``, inline: true },
-                { name: "Total Volume", value: `\`₹${totalRaised.toLocaleString('en-IN')}\``, inline: true },
-                { name: "Total Dispatches", value: `\`${this.stats.totalDispatched}\``, inline: true }
+                { name: "Partner Hub", value: "Se7en Kingdom", inline: true }
               ],
-              color: 0x6366F1,
-              footer: { text: "AuraTip Operations • auratip.live" },
+              color: 0x06B6D4,
+              footer: { text: "AuraTip Stream Operations • Se7en Kingdom" },
               timestamp: new Date().toISOString()
             }],
             components: [
               {
                 type: 1,
                 components: [
+                  {
+                    type: 2,
+                    style: 5,
+                    label: "👑 Join Se7en Kingdom",
+                    url: "https://discord.gg/r2XwC65"
+                  },
                   {
                     type: 2,
                     style: 5,
@@ -509,83 +517,15 @@ class AuraTipDiscordBot {
             ]
           }
         };
-      } else if (commandName === 'tip') {
-        const creatorOpt = data.options?.find(o => o.name === 'creator')?.value || 'gr8ansh';
-        const amountOpt = data.options?.find(o => o.name === 'amount')?.value;
+      } else if (commandName === 'streamer') {
+        const creatorOpt = data.options?.find(o => o.name === 'handle')?.value || 'gr8ansh';
         const cleanHandle = creatorOpt.toLowerCase().replace(/^@/, '');
 
         let creator = null;
-        if (this.prisma) {
-          creator = await this.prisma.creator.findUnique({ where: { handle: cleanHandle } }).catch(() => null);
-        }
-
-        const name = creator?.displayName || `@${cleanHandle}`;
-        const tipUrl = amountOpt
-          ? `https://auratip.live/@${cleanHandle}?amount=${amountOpt}`
-          : `https://auratip.live/@${cleanHandle}`;
-
-        responsePayload = {
-          type: 4,
-          data: {
-            embeds: [{
-              title: `✨ Support ${name} on Stream!`,
-              description: `Send tips with real-time animated alerts and Indian English AI voice readout (TTS) directly to **${name}**'s live stream!`,
-              fields: [
-                { name: "Creator Studio", value: `[auratip.live/@${cleanHandle}](${tipUrl})`, inline: true },
-                { name: "Payment Modes", value: "UPI, GPay, PhonePe, Paytm, Cards", inline: true },
-                { name: "Current Goal", value: creator ? `${getProgressBar(creator.goalRaisedInr, creator.goalTargetInr)} (₹${creator.goalRaisedInr.toLocaleString('en-IN')} / ₹${creator.goalTargetInr.toLocaleString('en-IN')})` : "Active", inline: false }
-              ],
-              color: 0x10B981,
-              footer: { text: "Click the button below to tip instantly via UPI" },
-              timestamp: new Date().toISOString()
-            }],
-            components: [
-              {
-                type: 1,
-                components: [
-                  {
-                    type: 2,
-                    style: 5,
-                    label: `⚡ Tip @${cleanHandle}${amountOpt ? ` (₹${amountOpt})` : ''}`,
-                    url: tipUrl
-                  },
-                  {
-                    type: 2,
-                    style: 5,
-                    label: "🎙️ Stream Page",
-                    url: `https://auratip.live/@${cleanHandle}`
-                  }
-                ]
-              }
-            ]
-          }
-        };
-      } else if (commandName === 'stats') {
-        const creatorOpt = data.options?.find(o => o.name === 'creator')?.value || 'gr8ansh';
-        const cleanHandle = creatorOpt.toLowerCase().replace(/^@/, '');
-
-        let creator = null;
-        let topTip = null;
-        let tipCount = 0;
-
         if (this.prisma) {
           creator = await this.prisma.creator.findUnique({
-            where: { handle: cleanHandle },
-            include: {
-              tips: {
-                where: { status: 'PAID' },
-                orderBy: { amountInrEquiv: 'desc' },
-                take: 1
-              }
-            }
+            where: { handle: cleanHandle }
           }).catch(() => null);
-
-          if (creator) {
-            topTip = creator.tips[0] || null;
-            tipCount = await this.prisma.tip.count({
-              where: { creatorHandle: cleanHandle, status: 'PAID' }
-            }).catch(() => 0);
-          }
         }
 
         if (!creator) {
@@ -593,29 +533,32 @@ class AuraTipDiscordBot {
             type: 4,
             data: {
               embeds: [{
-                title: `❌ Creator Not Found`,
+                title: "❌ Creator Not Found",
                 description: `Could not find a registered streamer with handle \`@${cleanHandle}\` on AuraTip.`,
                 color: 0xEF4444
               }]
             }
           };
         } else {
+          const name = creator.displayName || `@${cleanHandle}`;
+          const tipUrl = `https://auratip.live/@${cleanHandle}`;
           const progress = getProgressBar(creator.goalRaisedInr, creator.goalTargetInr);
+
           responsePayload = {
             type: 4,
             data: {
               embeds: [{
-                title: `📊 Streamer Stats: ${creator.displayName} (@${creator.handle})`,
+                title: `✨ ${name} (@${cleanHandle})`,
+                url: tipUrl,
                 description: creator.bio || "Verified AuraTip Live Streamer",
                 fields: [
-                  { name: "Total Raised", value: `\`₹${creator.goalRaisedInr.toLocaleString('en-IN')}\``, inline: true },
-                  { name: "Tips Received", value: `\`${tipCount} tips\``, inline: true },
-                  { name: "Active Aura Preset", value: `\`${(creator.chimePreset || 'emerald').toUpperCase()}\``, inline: true },
-                  { name: "Stream Goal", value: `${progress}\n**₹${creator.goalRaisedInr.toLocaleString('en-IN')}** raised of **₹${creator.goalTargetInr.toLocaleString('en-IN')}**`, inline: false },
-                  { name: "🏆 Top Supporter Tip", value: topTip ? `**${topTip.supporterName}** — ₹${topTip.amount} (${topTip.auraTheme} aura)` : "No tips recorded yet", inline: false }
+                  { name: "⚡ Status", value: creator.isApproved ? "🟢 Verified Partner" : "🟡 Pending Approval", inline: true },
+                  { name: "💰 Total Raised", value: `\`₹${(creator.goalRaisedInr || 0).toLocaleString('en-IN')}\``, inline: true },
+                  { name: "🎯 Stream Goal", value: `${progress}\n**₹${(creator.goalRaisedInr || 0).toLocaleString('en-IN')}** of **₹${(creator.goalTargetInr || 10000).toLocaleString('en-IN')}**`, inline: false },
+                  { name: "🔗 Tipping Page", value: `[auratip.live/@${cleanHandle}](${tipUrl})`, inline: false }
                 ],
-                color: getAuraColor(creator.chimePreset),
-                footer: { text: "AuraTip Stream Analytics" },
+                color: 0x06B6D4,
+                footer: { text: "AuraTip Streamer Profile • Se7en Kingdom" },
                 timestamp: new Date().toISOString()
               }],
               components: [
@@ -625,14 +568,14 @@ class AuraTipDiscordBot {
                     {
                       type: 2,
                       style: 5,
-                      label: `⚡ Tip @${creator.handle}`,
-                      url: `https://auratip.live/@${creator.handle}`
+                      label: `⚡ Tip @${cleanHandle}`,
+                      url: tipUrl
                     },
                     {
                       type: 2,
                       style: 5,
-                      label: "🌐 Public Profile",
-                      url: `https://auratip.live/@${creator.handle}`
+                      label: "👑 Se7en Kingdom Discord",
+                      url: "https://discord.gg/r2XwC65"
                     }
                   ]
                 }
@@ -640,45 +583,114 @@ class AuraTipDiscordBot {
             }
           };
         }
-      } else if (commandName === 'leaderboard') {
-        let topCreators = [];
-        let topTips = [];
+      } else if (commandName === 'approve') {
+        const creatorOpt = data.options?.find(o => o.name === 'handle')?.value;
+        const cleanHandle = creatorOpt ? creatorOpt.toLowerCase().replace(/^@/, '') : '';
 
-        if (this.prisma) {
-          topCreators = await this.prisma.creator.findMany({
-            where: { isApproved: true },
-            orderBy: { goalRaisedInr: 'desc' },
-            take: 5
-          }).catch(() => []);
+        if (!cleanHandle) {
+          responsePayload = {
+            type: 4,
+            data: { content: "Please specify a valid creator handle to approve." }
+          };
+        } else {
+          let creator = null;
+          if (this.prisma) {
+            creator = await this.prisma.creator.findUnique({
+              where: { handle: cleanHandle }
+            }).catch(() => null);
+          }
 
-          topTips = await this.prisma.tip.findMany({
-            where: { status: 'PAID' },
-            orderBy: { amountInrEquiv: 'desc' },
-            take: 5
-          }).catch(() => []);
+          if (!creator) {
+            responsePayload = {
+              type: 4,
+              data: {
+                embeds: [{
+                  title: "❌ Creator Not Found",
+                  description: `Could not find an applicant or creator with handle \`@${cleanHandle}\`.`,
+                  color: 0xEF4444
+                }]
+              }
+            };
+          } else if (creator.isApproved) {
+            responsePayload = {
+              type: 4,
+              data: {
+                embeds: [{
+                  title: "ℹ️ Already Approved",
+                  description: `Creator **@${cleanHandle}** (${creator.displayName}) is already approved and active.`,
+                  color: 0x06B6D4
+                }]
+              }
+            };
+          } else {
+            // Approve creator
+            const tempPassword = `Aura${Math.floor(100000 + Math.random() * 900000)}!`;
+            if (this.prisma) {
+              const crypto = require('crypto');
+              const bcrypt = require('bcryptjs');
+              const hashedPassword = await bcrypt.hash(tempPassword, 10);
+              const overlayKey = creator.overlayKey || crypto.randomBytes(16).toString('hex');
+              creator = await this.prisma.creator.update({
+                where: { handle: cleanHandle },
+                data: { isApproved: true, password: hashedPassword, overlayKey }
+              }).catch(() => creator);
+            }
+
+            // Dispatch Onboarding DM Embed
+            const dispatchRes = await this.dispatchOnboardingEmbed({
+              appItem: { discordUsername: creator.discord || cleanHandle },
+              creator,
+              tempPassword
+            });
+
+            responsePayload = {
+              type: 4,
+              data: {
+                embeds: [{
+                  title: "🎉 Creator Approved & Provisioned!",
+                  description: `Creator **@${cleanHandle}** (${creator.displayName}) has been approved!\nAn automated confidential DM embed with login credentials and a Se7en Kingdom invite has been sent to their Discord.`,
+                  fields: [
+                    { name: "Creator", value: `@${cleanHandle}`, inline: true },
+                    { name: "Status", value: "🟢 Verified Partner", inline: true },
+                    { name: "DM Result", value: `\`${dispatchRes.status}\` (${dispatchRes.method})`, inline: true },
+                    { name: "👑 Se7en Kingdom", value: "Creator invited to [Se7en Kingdom](https://discord.gg/r2XwC65) for onboarding discussion.", inline: false }
+                  ],
+                  color: 0x10B981,
+                  footer: { text: "AuraTip Creator Operations" },
+                  timestamp: new Date().toISOString()
+                }],
+                components: [
+                  {
+                    type: 1,
+                    components: [
+                      {
+                        type: 2,
+                        style: 5,
+                        label: "👑 Join Se7en Kingdom",
+                        url: "https://discord.gg/r2XwC65"
+                      },
+                      {
+                        type: 2,
+                        style: 5,
+                        label: "🌐 Public Tipping Page",
+                        url: `https://auratip.live/@${cleanHandle}`
+                      }
+                    ]
+                  }
+                ]
+              }
+            };
+          }
         }
-
-        const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
-        const creatorsText = topCreators.length > 0
-          ? topCreators.map((c, i) => `${medals[i]} **${c.displayName}** (\`@${c.handle}\`) — **₹${c.goalRaisedInr.toLocaleString('en-IN')}**`).join('\n')
-          : "No streamer data yet.";
-
-        const tipsText = topTips.length > 0
-          ? topTips.map((t, i) => `${medals[i]} **${t.supporterName}** — **₹${t.amount}** to \`@${t.creatorHandle}\``).join('\n')
-          : "No tips recorded yet.";
-
+      } else if (commandName === 'kingdom') {
         responsePayload = {
           type: 4,
           data: {
             embeds: [{
-              title: "🏆 AuraTip Live Leaderboard",
-              description: "Today's top-earning streamers and biggest community supporters across India!",
-              fields: [
-                { name: "Top Streamers", value: creatorsText, inline: false },
-                { name: "Largest Tips Ever", value: tipsText, inline: false }
-              ],
-              color: 0xF59E0B, // Gold
-              footer: { text: "AuraTip Live Tipping Platform" },
+              title: "👑 Se7en Kingdom — Official AuraTip Creator Hub",
+              description: "Welcome to **Se7en Kingdom**! The official home server for AuraTip livestreamers, partners, and community members.\n\n**Join Se7en Kingdom for:**\n• **Custom Partner Split Agreements**: Discuss individualized payout terms and revenue splits directly with **GR8ANSH**\n• **1-on-1 Onboarding Support**: Guidance for 60 FPS OBS overlays and custom sound chimes\n• **Streamer Verification**: Fast-track your application and get verified partner status\n• **Exclusive Creator Community**: Connect with fellow livestreamers across YouTube, Kick, and Twitch",
+              color: 0xFFB800, // Royal Gold
+              footer: { text: "Se7en Kingdom • Official Home of AuraTip" },
               timestamp: new Date().toISOString()
             }],
             components: [
@@ -688,7 +700,13 @@ class AuraTipDiscordBot {
                   {
                     type: 2,
                     style: 5,
-                    label: "⚡ Visit AuraTip",
+                    label: "👑 Join Se7en Kingdom Server",
+                    url: "https://discord.gg/r2XwC65"
+                  },
+                  {
+                    type: 2,
+                    style: 5,
+                    label: "⚡ Visit AuraTip Platform",
                     url: "https://auratip.live"
                   }
                 ]
@@ -696,119 +714,42 @@ class AuraTipDiscordBot {
             ]
           }
         };
-      } else if (commandName === 'recent') {
-        const creatorOpt = data.options?.find(o => o.name === 'creator')?.value;
-        const cleanHandle = creatorOpt ? creatorOpt.toLowerCase().replace(/^@/, '') : null;
-
-        let tips = [];
-        if (this.prisma) {
-          tips = await this.prisma.tip.findMany({
-            where: cleanHandle ? { creatorHandle: cleanHandle, status: 'PAID' } : { status: 'PAID' },
-            orderBy: { createdAt: 'desc' },
-            take: 5
-          }).catch(() => []);
-        }
-
-        const tipsList = tips.length > 0
-          ? tips.map(t => `• **₹${t.amount}** from **${t.supporterName}** ${cleanHandle ? '' : `to \`@${t.creatorHandle}\``} (${t.auraTheme} aura)\n  ↳ _"${t.message || 'No message'}"_`).join('\n\n')
-          : "No recent tips found.";
-
-        responsePayload = {
-          type: 4,
-          data: {
-            embeds: [{
-              title: `🕒 Recent Tips ${cleanHandle ? `for @${cleanHandle}` : 'across AuraTip'}`,
-              description: tipsList,
-              color: 0x06B6D4,
-              footer: { text: "AuraTip Live Alerts" },
-              timestamp: new Date().toISOString()
-            }]
-          }
-        };
-      } else if (commandName === 'testalert') {
-        const creatorOpt = data.options?.find(o => o.name === 'creator')?.value || 'gr8ansh';
-        const themeOpt = data.options?.find(o => o.name === 'theme')?.value || 'gold';
-        const cleanHandle = creatorOpt.toLowerCase().replace(/^@/, '');
-
-        let creator = null;
-        if (this.prisma) {
-          creator = await this.prisma.creator.findUnique({ where: { handle: cleanHandle } }).catch(() => null);
-        }
-
-        if (!creator) {
-          responsePayload = {
-            type: 4,
-            data: {
-              embeds: [{
-                title: "❌ Creator Not Found",
-                description: `Could not find streamer \`@${cleanHandle}\` to trigger test alert.`,
-                color: 0xEF4444
-              }]
-            }
-          };
-        } else {
-          const testAmount = (themeOpt === 'gold') ? 10000 : (themeOpt === 'magenta') ? 5000 : (themeOpt === 'special') ? 2500 : 500;
-          const testAlert = {
-            id: `dc_test_${Date.now()}`,
-            name: "Discord Bot Test Alert",
-            supporterName: "Discord Bot Test Alert",
-            amount: testAmount,
-            amountInr: testAmount,
-            amountInrEquiv: testAmount,
-            currency: "INR",
-            symbol: "₹",
-            message: `⚡ 60 FPS live test alert triggered directly from Discord slash command!`,
-            auraTheme: themeOpt,
-            durationSec: 12,
-            ttsEnabled: true,
-            speechText: `Discord live test alert with ${themeOpt} aura!`
-          };
-
-          if (this.io) {
-            this.io.to(`overlay:${creator.overlayKey}`).emit('new_tip', testAlert);
-            this.io.to(`creator:${creator.handle}`).emit('new_tip', testAlert);
-          }
-
-          responsePayload = {
-            type: 4,
-            data: {
-              embeds: [{
-                title: "🎉 Live 60 FPS Alert Dispatched to OBS!",
-                description: `Triggered a test alert for **@${cleanHandle}**'s live stream overlay.`,
-                fields: [
-                  { name: "Streamer", value: `@${cleanHandle} (${creator.displayName})`, inline: true },
-                  { name: "Aura Theme", value: `**${themeOpt.toUpperCase()}** ⚡`, inline: true },
-                  { name: "Tier Value", value: `₹${testAmount}`, inline: true },
-                  { name: "Overlay Target", value: `\`overlay:${creator.overlayKey.slice(0, 8)}...\``, inline: false }
-                ],
-                color: getAuraColor(themeOpt),
-                footer: { text: "Check your OBS Studio or browser source to see the alert!" },
-                timestamp: new Date().toISOString()
-              }]
-            }
-          };
-        }
       } else if (commandName === 'help') {
         responsePayload = {
           type: 4,
           data: {
             embeds: [{
-              title: "🤖 AuraTip Bot Commands & Features",
-              description: "Welcome to the official **AuraTip Live Platform** Discord Bot! Direct UPI tipping with 60 FPS live stream alerts.",
+              title: "🤖 AuraTip Bot — Commands",
+              description: "AuraTip Discord Integration & Creator Operations Bot.",
               fields: [
-                { name: "`/ping`", value: "Check bot latency, heartbeat, and gateway status", inline: false },
-                { name: "`/status`", value: "View real-time platform metrics, total volume, and active fleet", inline: false },
-                { name: "`/tip <creator> [amount]`", value: "Get instant tipping link and interactive card for a streamer", inline: false },
-                { name: "`/stats <creator>`", value: "View earnings, stream goal progress, and top supporter", inline: false },
-                { name: "`/leaderboard`", value: "View top 5 streamers and top community supporters", inline: false },
-                { name: "`/recent [creator]`", value: "View the latest 5 live tips received", inline: false },
-                { name: "`/testalert <creator> [theme]`", value: "Fire a live 60 FPS test alert to a creator OBS overlay directly from Discord", inline: false },
-                { name: "`/help`", value: "Show this help and feature guide", inline: false }
+                { name: "`/ping`", value: "Check bot latency, heartbeat, and gateway connection", inline: false },
+                { name: "`/streamer <handle>`", value: "Look up a creator profile, tipping link, and stream goal", inline: false },
+                { name: "`/approve <handle>`", value: "Approve a creator and automatically dispatch their onboarding credentials DM", inline: false },
+                { name: "`/kingdom`", value: "Official invite to the **Se7en Kingdom** Discord server for creator partnerships & discussions", inline: false }
               ],
-              color: 0x5865F2,
-              footer: { text: "AuraTip • Direct UPI Stream Alerts" },
+              color: 0x06B6D4,
+              footer: { text: "AuraTip • Se7en Kingdom Network" },
               timestamp: new Date().toISOString()
-            }]
+            }],
+            components: [
+              {
+                type: 1,
+                components: [
+                  {
+                    type: 2,
+                    style: 5,
+                    label: "👑 Join Se7en Kingdom",
+                    url: "https://discord.gg/r2XwC65"
+                  },
+                  {
+                    type: 2,
+                    style: 5,
+                    label: "🌐 Visit AuraTip",
+                    url: "https://auratip.live"
+                  }
+                ]
+              }
+            ]
           }
         };
       } else {
@@ -1228,93 +1169,10 @@ class AuraTipDiscordBot {
 
   // Live Tip Alert Broadcast to Discord Server (using configured tip_alerts channel)
   async broadcastTipAlert(creator, tip) {
-    if (!this.token && !this.webhookUrl) return;
-
-    const routing = this.getRoutingConfig();
-    const conf = routing.tip_alerts || DEFAULT_ROUTING.tip_alerts;
-    if (conf.enabled === false) return;
-
-    const amount = Number(tip.amount || 0);
-    if (conf.minAmount && amount < Number(conf.minAmount)) return;
-
-    const targetChannel = conf.channelId || this.channelId;
-    if (!targetChannel && !this.webhookUrl) return;
-
-    const theme = (tip.auraTheme || 'emerald').toLowerCase();
-    const color = conf.color ? parseInt(conf.color.replace('#', ''), 16) : getAuraColor(theme);
-    const supporter = tip.supporterName || tip.name || 'Anonymous';
-    const amountStr = `₹${amount}`;
-    const cleanHandle = (creator?.handle || 'creator').toLowerCase().replace(/^@/, '');
-    const goalRaised = creator?.goalRaisedInr || 0;
-    const goalTarget = creator?.goalTargetInr || 10000;
-    const progress = getProgressBar(goalRaised, goalTarget);
-
-    const title = (conf.titleTemplate || '⚡ LIVE TIP ALERT: ₹{amount} for @{creator}!')
-      .replace('{amount}', amount)
-      .replace('{creator}', cleanHandle)
-      .replace('{supporter}', supporter);
-
-    const mentionPrefix = this.buildMentionString(conf.mention);
-
-    const embed = {
-      title,
-      description: `**${supporter}** just dropped an **${theme.toUpperCase()} AURA** tip with 60 FPS live stream alert!`,
-      color,
-      fields: [
-        { name: "Supporter", value: supporter, inline: true },
-        { name: "Amount", value: `${amountStr} (${tip.currency || 'INR'})`, inline: true },
-        { name: "Aura Tier", value: `${theme.toUpperCase()} ⚡ (${tip.durationSec || 8}s)`, inline: true },
-        { name: "Message", value: tip.message ? `"${tip.message}"` : "_No message included_", inline: false }
-      ],
-      footer: { text: "AuraTip Real-Time Stream Engine • 60 FPS Alerts" },
-      timestamp: new Date().toISOString()
-    };
-
-    if (conf.showProgressBar !== false) {
-      embed.fields.push({
-        name: "Stream Goal",
-        value: `${progress} (₹${goalRaised.toLocaleString('en-IN')} / ₹${goalTarget.toLocaleString('en-IN')})`,
-        inline: false
-      });
-    }
-
-    const payload = {
-      content: `${mentionPrefix}🎉 **New Live Tip Alert for @${cleanHandle}!**`,
-      embeds: [embed],
-      components: [
-        {
-          type: 1,
-          components: [
-            {
-              type: 2,
-              style: 5,
-              label: `⚡ Tip @${cleanHandle}`,
-              url: `https://auratip.live/@${cleanHandle}`
-            },
-            {
-              type: 2,
-              style: 5,
-              label: '🏆 AuraTip Platform',
-              url: 'https://auratip.live'
-            }
-          ]
-        }
-      ]
-    };
-
-    try {
-      if (this.token && targetChannel) {
-        const res = await this.sendChannelMessage(targetChannel, payload);
-        this.recordDispatch({ type: 'TIP_ALERT', ...res, target: `#${targetChannel}`, handle: cleanHandle, amount });
-      } else if (this.webhookUrl) {
-        await this.sendWebhook(this.webhookUrl, payload);
-      }
-    } catch (err) {
-      console.warn('[DiscordBot] broadcastTipAlert warning:', err.message);
-    }
+    // Disabled per user directive: no live alert embeds in Discord channels
+    return { skipped: true, reason: 'Live tip alert embeds disabled' };
   }
 
-  // Goal Celebrations Broadcast to dedicated channel
   async broadcastGoalCelebration(creator, goal) {
     if (!this.token && !this.webhookUrl) return;
     const routing = this.getRoutingConfig();
@@ -1579,7 +1437,80 @@ class AuraTipDiscordBot {
     const targetTag = discordInput || `@${handle}`;
     const dispatchId = `AT-DISPATCH-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 900 + 100)}`;
 
-    let deliveryResult = {
+        if (!payload) {
+      const tippingUrl = "https://auratip.live/@" + handle;
+      const studioUrl = "https://auratip.live/dashboard.html";
+      const overlayUrl = "https://auratip.live/overlay-alert.html?key=" + (creator.overlayKey || 'KEY');
+      const kingdomInvite = "https://discord.gg/r2XwC65";
+      const safeUpi = creator.upiVpa || (handle + "@upi");
+
+      payload = {
+        content: "👑 **Welcome to AuraTip, " + targetTag + "! Your Creator Account is Approved.** 🎉\n" +
+                 "Please join the **Se7en Kingdom** server to finalize your setup & revenue split!",
+        embeds: [
+          {
+            author: {
+              name: "AuraTip Creator Operations",
+              icon_url: "https://cdn.discordapp.com/app-icons/1561385016766758973/99d05448ccd5619290467abdcc859763.png",
+              url: "https://auratip.live"
+            },
+            title: "✨ Creator Verified: Welcome " + (creator.displayName || handle) + "!",
+            url: tippingUrl,
+            description: "Your application has been **approved**! Your live stream tipping profile is now active on AuraTip.\n\n" +
+                         "👑 **Next Step — Join Se7en Kingdom Discord for Further Discussion**\n" +
+                         "Please join our official creator home server: **[discord.gg/r2XwC65](" + kingdomInvite + ")**\n" +
+                         "Our team will discuss and configure your:\n" +
+                         "• Custom partner revenue splits & direct settlement terms\n" +
+                         "• Custom alert sounds, visual styling & OBS overlay fine-tuning\n" +
+                         "• Dedicated 1-on-1 partner verification and support\n\n" +
+                         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                         "**🔐 Your Private Access & OBS Keys:**",
+            color: 0x06B6D4,
+            fields: [
+              { name: "👤 Creator Handle", value: "`@" + handle + "`", inline: true },
+              { name: "⚡ Account Status", value: "🟢 Verified Partner", inline: true },
+              { name: "💳 Payout Destination", value: "`" + safeUpi + "`", inline: true },
+              { name: "🌐 Your Public Tipping Link", value: "🔗 [auratip.live/@" + handle + "](" + tippingUrl + ")\n*(Share this with your viewers in chat & video descriptions)*", inline: false },
+              { name: "🔐 Creator Dashboard Password", value: "||" + (tempPassword || 'Check your email') + "||\n*(Click the black box to reveal your temporary password)*", inline: false },
+              { name: "🎥 OBS 1080p Browser Source URL", value: "||" + overlayUrl + "||\n⚡ **OBS Settings**: Width `1920`, Height `1080`, FPS `60`, check *Control audio via OBS*\n*(Keep this key confidential)*", inline: false },
+              { name: "👑 Se7en Kingdom Server Invitation", value: "Join **[Se7en Kingdom](" + kingdomInvite + ")** now to complete your creator onboarding and start your partnership discussion with GR8ANSH.", inline: false }
+            ],
+            footer: {
+              text: "AuraTip Creator Operations • Se7en Kingdom Network",
+              icon_url: "https://cdn.discordapp.com/app-icons/1561385016766758973/99d05448ccd5619290467abdcc859763.png"
+            },
+            timestamp: new Date().toISOString()
+          }
+        ],
+        components: [
+          {
+            type: 1,
+            components: [
+              {
+                type: 2,
+                style: 5,
+                label: "👑 Join Se7en Kingdom",
+                url: kingdomInvite
+              },
+              {
+                type: 2,
+                style: 5,
+                label: "🚀 Launch Creator Studio",
+                url: studioUrl
+              },
+              {
+                type: 2,
+                style: 5,
+                label: "⚡ View Tipping Page",
+                url: tippingUrl
+              }
+            ]
+          }
+        ]
+      };
+    }
+
+let deliveryResult = {
       dispatchId,
       status: 'PENDING',
       method: 'NONE',
