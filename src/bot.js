@@ -10,6 +10,14 @@ const path = require('path');
 // When imported as a module by Auratip, the caller can override via setContext().
 const DISPATCH_LOG_FILE = path.join(__dirname, '..', 'data', 'dispatch-audit-log.json');
 const ROUTING_CONFIG_FILE = path.join(__dirname, '..', 'data', 'channel-routing.json');
+const PRESENCE_CONFIG_FILE = path.join(__dirname, '..', 'data', 'bot-presence.json');
+
+const DEFAULT_PRESENCE = {
+  status: 'online',
+  activityType: 0, // 0 = Playing, 1 = Streaming, 2 = Listening, 3 = Watching, 5 = Competing
+  activityName: 'Collecting Auratips ⚡ | auratip.live',
+  activityUrl: 'https://auratip.live'
+};
 
 const DEFAULT_ROUTING = {
   tip_alerts: {
@@ -72,6 +80,9 @@ function ensureDataDir() {
   }
   if (!fs.existsSync(ROUTING_CONFIG_FILE)) {
     fs.writeFileSync(ROUTING_CONFIG_FILE, JSON.stringify(DEFAULT_ROUTING, null, 2));
+  }
+  if (!fs.existsSync(PRESENCE_CONFIG_FILE)) {
+    fs.writeFileSync(PRESENCE_CONFIG_FILE, JSON.stringify(DEFAULT_PRESENCE, null, 2));
   }
 }
 
@@ -197,6 +208,146 @@ class AuraTipDiscordBot {
     if (mentionType === 'everyone') return '@everyone ';
     if (/^\d+$/.test(mentionType)) return `<@&${mentionType}> `;
     return '';
+  }
+
+  // Load Presence Configuration
+  loadPresenceConfig() {
+    try {
+      ensureDataDir();
+      const raw = fs.readFileSync(PRESENCE_CONFIG_FILE, 'utf8');
+      return { ...DEFAULT_PRESENCE, ...JSON.parse(raw) };
+    } catch (e) {
+      return { ...DEFAULT_PRESENCE };
+    }
+  }
+
+  // Update Bot Presence and broadcast to Discord Gateway WebSocket
+  async updatePresence({ status, activityType, activityName, activityUrl }) {
+    ensureDataDir();
+    const current = this.loadPresenceConfig();
+    const updated = {
+      status: status || current.status,
+      activityType: activityType !== undefined ? Number(activityType) : current.activityType,
+      activityName: activityName !== undefined ? activityName.trim() : current.activityName,
+      activityUrl: activityUrl !== undefined ? activityUrl.trim() : current.activityUrl
+    };
+
+    fs.writeFileSync(PRESENCE_CONFIG_FILE, JSON.stringify(updated, null, 2));
+
+    // Send Opcode 3 Status Update to Gateway
+    if (this.ws && this.ws.readyState === 1) { // 1 = OPEN
+      try {
+        const payload = {
+          op: 3,
+          d: {
+            since: null,
+            activities: updated.activityName ? [{
+              name: updated.activityName,
+              type: updated.activityType,
+              url: updated.activityType === 1 ? (updated.activityUrl || 'https://twitch.tv/auratip') : undefined,
+              state: updated.activityName
+            }] : [],
+            status: updated.status,
+            afk: false
+          }
+        };
+        this.ws.send(JSON.stringify(payload));
+      } catch (err) {
+        console.warn('[DiscordBot] Failed to send presence to gateway:', err.message);
+      }
+    }
+
+    return updated;
+  }
+
+  // Fetch complete Bot Profile from Discord API
+  async getProfile() {
+    if (!this.token) throw new Error('Bot token is not configured.');
+
+    // Fetch user profile
+    const userRes = await fetch('https://discord.com/api/v10/users/@me', {
+      headers: { 'Authorization': `Bot ${this.token}` }
+    });
+    if (!userRes.ok) throw new Error(`Failed to fetch Discord user: HTTP ${userRes.status}`);
+    const botUser = await userRes.json();
+    this.botUser = botUser;
+
+    // Fetch application profile ("About Me", description, tags)
+    let application = null;
+    try {
+      const appRes = await fetch('https://discord.com/api/v10/applications/@me', {
+        headers: { 'Authorization': `Bot ${this.token}` }
+      });
+      if (appRes.ok) application = await appRes.json();
+    } catch (e) {}
+
+    return {
+      botUser: {
+        id: botUser.id,
+        username: botUser.username,
+        discriminator: botUser.discriminator,
+        tag: `${botUser.username}#${botUser.discriminator || '0'}`,
+        avatar: botUser.avatar ? `https://cdn.discordapp.com/avatars/${botUser.id}/${botUser.avatar}.png?size=256` : null,
+        banner: botUser.banner ? `https://cdn.discordapp.com/banners/${botUser.id}/${botUser.banner}.png?size=600` : null,
+        accentColor: botUser.accent_color
+      },
+      application: application ? {
+        id: application.id,
+        name: application.name,
+        description: application.description || '',
+        icon: application.icon ? `https://cdn.discordapp.com/app-icons/${application.id}/${application.icon}.png?size=256` : null,
+        tags: application.tags || []
+      } : null,
+      presence: this.loadPresenceConfig()
+    };
+  }
+
+  // Update Bot Profile directly via Discord REST API (Username, Avatar, Banner, About Me)
+  async updateProfile({ username, avatar, banner, description }) {
+    if (!this.token) throw new Error('Bot token is not configured.');
+    const results = {};
+
+    // 1. Update User Profile (Username, Avatar, Banner)
+    const userPatch = {};
+    if (username && username.trim()) userPatch.username = username.trim();
+    if (avatar !== undefined) userPatch.avatar = avatar; // base64 Data URI or null
+    if (banner !== undefined) userPatch.banner = banner; // base64 Data URI or null
+
+    if (Object.keys(userPatch).length > 0) {
+      const userRes = await fetch('https://discord.com/api/v10/users/@me', {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bot ${this.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(userPatch)
+      });
+      if (!userRes.ok) {
+        const errJson = await userRes.json().catch(() => ({}));
+        throw new Error(errJson.message || `Failed to update user profile: HTTP ${userRes.status}`);
+      }
+      this.botUser = await userRes.json();
+      results.userUpdated = true;
+    }
+
+    // 2. Update Application Profile ("About Me" / description)
+    if (description !== undefined) {
+      const appRes = await fetch('https://discord.com/api/v10/applications/@me', {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bot ${this.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ description: description.trim() })
+      });
+      if (!appRes.ok) {
+        const errJson = await appRes.json().catch(() => ({}));
+        throw new Error(errJson.message || `Failed to update bot description: HTTP ${appRes.status}`);
+      }
+      results.applicationUpdated = true;
+    }
+
+    return { success: true, ...results, profile: await this.getProfile() };
   }
 
   // Initialize bot connection
@@ -720,15 +871,19 @@ class AuraTipDiscordBot {
                   browser: 'auratip-bot',
                   device: 'auratip-bot'
                 },
-                presence: {
-                  activities: [{
-                    name: 'Collecting Auratips for streamers',
-                    type: 0, // Playing
-                    state: 'Collecting Auratips for streamers'
-                  }],
-                  status: 'online',
-                  afk: false
-                }
+                presence: (() => {
+                  const p = this.loadPresenceConfig();
+                  return {
+                    activities: p.activityName ? [{
+                      name: p.activityName,
+                      type: p.activityType || 0,
+                      url: p.activityType === 1 ? (p.activityUrl || 'https://twitch.tv/auratip') : undefined,
+                      state: p.activityName
+                    }] : [],
+                    status: p.status || 'online',
+                    afk: false
+                  };
+                })()
               }
             }));
           }

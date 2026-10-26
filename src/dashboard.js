@@ -18,7 +18,7 @@ const app = express();
 const PORT = process.env.DASHBOARD_PORT || 3001;
 const DASHBOARD_PASSWORD = process.env.DASHBOARD_PASSWORD || process.env.ADMIN_PASSCODE || 'admin123';
 
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Simple token-based auth
@@ -68,7 +68,35 @@ app.get('/api/bot/status', requireAuth, (req, res) => {
   });
 });
 
-// ── Guild Info (from Discord API) ────────────────────────────
+// ── Bot Profile & Presence Management ────────────────────────
+app.get('/api/bot/profile', requireAuth, async (req, res) => {
+  try {
+    const profile = await bot.getProfile();
+    res.json({ success: true, ...profile });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/bot/profile', requireAuth, async (req, res) => {
+  try {
+    const { username, avatar, banner, description } = req.body;
+    const result = await bot.updateProfile({ username, avatar, banner, description });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/bot/activity', requireAuth, async (req, res) => {
+  try {
+    const { status, activityType, activityName, activityUrl } = req.body;
+    const updated = await bot.updatePresence({ status, activityType, activityName, activityUrl });
+    res.json({ success: true, presence: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 app.get('/api/guild/info', requireAuth, async (req, res) => {
   if (!bot.token || !bot.guildId) {
     return res.json({ error: 'Bot not connected or guild not set', guild: null });
