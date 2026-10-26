@@ -89,15 +89,17 @@ function ensureDataDir() {
 // Map Aura theme names to Discord embed hex colors
 function getAuraColor(theme) {
   const map = {
-    gold: 0xF59E0B,
-    magenta: 0xEC4899,
-    special: 0x8B5CF6,
-    solar: 0xF97316,
-    cyan: 0x06B6D4,
-    mint: 0x10B981,
-    emerald: 0x059669
+    gold: 0xFFB800,    // Divine (₹10,000+)
+    divine: 0xFFB800,  // Divine (₹10,000+)
+    special: 0x8B5CF6, // Cosmic (₹1,000 - ₹9,999)
+    cosmic: 0x8B5CF6,  // Cosmic (₹1,000 - ₹9,999)
+    solar: 0xF97316,   // Solar (₹500 - ₹999)
+    mint: 0x10B981,    // Emerald (₹100 - ₹499)
+    emerald: 0x10B981, // Emerald (₹100 - ₹499)
+    cyan: 0x00F0FF,    // Cyan (<₹100)
+    magenta: 0xEC4899
   };
-  return map[String(theme || '').toLowerCase()] || 0x10B981;
+  return map[String(theme || '').toLowerCase()] || 0x00F0FF;
 }
 
 // Generate ASCII progress bar

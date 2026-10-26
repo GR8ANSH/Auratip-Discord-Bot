@@ -829,6 +829,16 @@
                   </div>
                 </div>
 
+                <!-- Snap to Aura Tier Palette -->
+                <div class="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-black/30 border border-white/5">
+                  <span class="text-[10px] font-mono text-zinc-400 uppercase tracking-wider font-semibold mr-1">⚡ Snap Aura:</span>
+                  <button type="button" onclick="setStudioAura('cyan', '#00F0FF')" class="px-2 py-1 rounded-lg text-[10px] font-mono font-bold border border-cyan-500/40 bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/25 transition cursor-pointer">Cyan &lt;₹100</button>
+                  <button type="button" onclick="setStudioAura('emerald', '#10B981')" class="px-2 py-1 rounded-lg text-[10px] font-mono font-bold border border-emerald-500/40 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/25 transition cursor-pointer">Emerald ₹100+</button>
+                  <button type="button" onclick="setStudioAura('solar', '#F97316')" class="px-2 py-1 rounded-lg text-[10px] font-mono font-bold border border-orange-500/40 bg-orange-500/10 text-orange-400 hover:bg-orange-500/25 transition cursor-pointer">Solar ₹500+</button>
+                  <button type="button" onclick="setStudioAura('cosmic', '#8B5CF6')" class="px-2 py-1 rounded-lg text-[10px] font-mono font-bold border border-purple-500/40 bg-purple-500/10 text-purple-400 hover:bg-purple-500/25 transition cursor-pointer">Cosmic ₹1K+</button>
+                  <button type="button" onclick="setStudioAura('divine', '#FFB800')" class="px-2 py-1 rounded-lg text-[10px] font-mono font-bold border border-amber-500/40 bg-amber-500/10 text-amber-400 hover:bg-amber-500/25 transition cursor-pointer">Divine ₹10K+</button>
+                </div>
+
                 <div>
                   <label class="block text-xs text-zinc-400 mb-1">Embed URL (Clickable Title)</label>
                   <input type="text" id="studioUrl" oninput="updateLivePreview()" value="https://auratip.live/@ansh" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
@@ -1581,6 +1591,13 @@
       }
       renderStudioFields();
       updateLivePreview();
+    }
+
+    function setStudioAura(auraName, hexColor) {
+      document.getElementById('studioColorPicker').value = hexColor;
+      document.getElementById('studioColorText').value = hexColor;
+      updateLivePreview();
+      showToast(`Accent color snapped to ${auraName.toUpperCase()} Aura (${hexColor})`, 'info');
     }
 
     async function dispatchStudioEmbed() {
