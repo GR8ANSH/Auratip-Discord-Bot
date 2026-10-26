@@ -1,16 +1,18 @@
 {
   "name": "auratip-discord-bot",
   "version": "1.0.0",
-  "description": "⚡ AuraTip Discord Bot — Personal DM onboarding, live tip alerts, slash commands & Gateway presence for the AuraTip streaming platform.",
+  "description": "⚡ AuraTip Discord Bot — Personal DM onboarding, live tip alerts, slash commands, Gateway presence & web dashboard.",
   "main": "src/bot.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "start": "node src/dashboard.js",
+    "bot": "node src/index.js",
+    "dev": "node --watch src/dashboard.js"
   },
-  "keywords": ["discord", "bot", "auratip", "streaming", "tipping", "upi"],
+  "keywords": ["discord", "bot", "auratip", "streaming", "tipping", "dashboard"],
   "author": "gr8ansh",
   "license": "MIT",
   "dependencies": {
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
   }
 }

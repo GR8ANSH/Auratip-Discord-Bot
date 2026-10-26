@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuraTip Bot — Control Dashboard</title>
+  <link rel="icon" type="image/png" href="https://cdn.discordapp.com/app-icons/1561385016766758973/99d05448ccd5619290467abdcc859763.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace']
+          },
+          colors: {
+            discord: {
+              brand: '#5865F2',
+              dark: '#1E1F22',
+              darker: '#111214',
+              card: '#2B2D31',
+              chat: '#313338',
+              hover: '#35373C',
+              input: '#1E1F22',
+              border: 'rgba(255, 255, 255, 0.08)'
+            },
+            aura: {
+              cyan: '#00F0FF',
+              emerald: '#10B981',
+              amber: '#F59E0B',
+              magenta: '#EC4899',
+              purple: '#8B5CF6',
+              rose: '#F43F5E'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #111214;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(88, 101, 242, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(0, 240, 255, 0.04) 0%, transparent 40%);
+      background-attachment: fixed;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.3);
+    }
+    .glass-box {
+      background: rgba(43, 45, 49, 0.7);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .discord-embed-card {
+      background-color: #2B2D31;
+      border-left: 4px solid #00F0FF;
+      border-radius: 4px;
+    }
+    .badge-bot {
+      background-color: #5865F2;
+      color: #FFFFFF;
+      font-size: 10px;
+      padding: 1px 4.5px;
+      border-radius: 3px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-zinc-100 flex flex-col font-sans selection:bg-discord-brand selection:text-white">
+
+  <!-- ========================================== -->
+  <!-- 1. AUTHENTICATION MODAL                    -->
+  <!-- ========================================== -->
+  <div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-2xl">
+    <div class="glass-box rounded-3xl p-8 sm:p-10 max-w-md w-full shadow-2xl relative border border-discord-brand/30 space-y-6">
+      <div class="text-center space-y-3">
+        <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-discord-brand to-cyan-500 p-0.5 mx-auto flex items-center justify-center shadow-lg shadow-discord-brand/30">
+          <img src="https://cdn.discordapp.com/app-icons/1561385016766758973/99d05448ccd5619290467abdcc859763.png" alt="AuraTip" class="w-full h-full rounded-[14px] object-cover">
+        </div>
+        <h1 class="text-2xl font-extrabold text-white tracking-tight">AuraTip Bot Control</h1>
+        <p class="text-xs text-zinc-400">Embed Dispatch &amp; Channel Routing Dashboard</p>
+      </div>
+
+      <div id="loginError" class="hidden px-4 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center font-medium"></div>
+
+      <form onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-mono uppercase text-zinc-400 mb-1.5">Master Passcode</label>
+          <input type="password" id="passcodeInput" required placeholder="Enter passcode (default: admin123)..." 
+            class="w-full px-4 py-3 rounded-xl bg-discord-input border border-white/10 text-white text-sm font-mono focus:border-discord-brand focus:outline-none focus:ring-2 focus:ring-discord-brand/30">
+        </div>
+        <button type="submit" class="w-full py-3.5 rounded-xl bg-discord-brand hover:bg-indigo-500 text-white font-bold text-sm uppercase tracking-wider transition shadow-lg shadow-discord-brand/25 flex items-center justify-center gap-2 cursor-pointer">
+          <span>Authenticate Session</span>
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- 2. MAIN APPLICATION SHELL                  -->
+  <!-- ========================================== -->
+  <div id="appShell" class="hidden min-h-screen flex flex-col md:flex-row">
+    
+    <!-- LEFT SIDEBAR -->
+    <aside class="w-full md:w-64 bg-discord-darker border-r border-discord-border flex flex-col flex-shrink-0 md:h-screen md:sticky md:top-0">
+      
+      <!-- Bot Profile Header -->
+      <div class="p-4 border-b border-discord-border flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <img src="https://cdn.discordapp.com/app-icons/1561385016766758973/99d05448ccd5619290467abdcc859763.png" alt="Bot" class="w-10 h-10 rounded-full border border-white/10">
+            <span id="botStatusDot" class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-discord-darker"></span>
+          </div>
+          <div>
+            <div class="text-sm font-extrabold text-white flex items-center gap-1.5">
+              <span>AuraTip Bot</span>
+              <span class="badge-bot">BOT</span>
+            </div>
+            <div id="botUserTag" class="text-[11px] font-mono text-zinc-400">#0675 • Online</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="flex-1 p-3 space-y-1 overflow-y-auto custom-scrollbar">
+        <button onclick="switchTab('overview')" id="nav-overview" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition text-discord-brand bg-discord-brand/10 border border-discord-brand/20">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+          <span>Overview</span>
+        </button>
+
+        <button onclick="switchTab('routing')" id="nav-routing" class="nav-btn w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition text-zinc-400 hover:text-white hover:bg-white/5">
+          <div class="flex items-center gap-3">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+            <span>Channel Routing</span>
+          </div>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-aura-cyan/15 text-aura-cyan font-bold border border-aura-cyan/30">6 Events</span>
+        </button>
+
+        <button onclick="switchTab('studio')" id="nav-studio" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition text-zinc-400 hover:text-white hover:bg-white/5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+          <span>Embed Studio</span>
+        </button>
+
+        <button onclick="switchTab('members')" id="nav-members" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition text-zinc-400 hover:text-white hover:bg-white/5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+          <span>Member DM Tool</span>
+        </button>
+
+        <button onclick="switchTab('dispatches')" id="nav-dispatches" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition text-zinc-400 hover:text-white hover:bg-white/5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          <span>Dispatch History</span>
+        </button>
+
+        <button onclick="switchTab('bridge')" id="nav-bridge" class="nav-btn w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition text-zinc-400 hover:text-white hover:bg-white/5">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+          <span>Platform Bridge</span>
+        </button>
+      </nav>
+
+      <!-- Bottom Platform Quick Links -->
+      <div class="p-3 border-t border-discord-border space-y-2">
+        <a href="http://localhost:3000/admin.html" target="_blank" class="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-300 transition">
+          <span class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-aura-cyan"></span>
+            <span>Master Control Terminal</span>
+          </span>
+          <svg class="w-3.5 h-3.5 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+        </a>
+        <button onclick="handleLogout()" class="w-full py-2 rounded-xl border border-red-500/20 text-red-400 hover:bg-red-500/10 text-xs font-semibold transition cursor-pointer">
+          Sign Out
+        </button>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT VIEWPORT -->
+    <main class="flex-1 min-w-0 bg-[#111214] flex flex-col h-screen overflow-y-auto custom-scrollbar">
+      
+      <!-- TOP STATUS BAR -->
+      <header class="sticky top-0 z-30 bg-discord-dark/80 backdrop-blur-md border-b border-discord-border px-6 py-3.5 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <h2 id="pageTitle" class="text-base font-extrabold text-white tracking-tight">Overview</h2>
+          <span id="guildNameHeader" class="text-xs px-2.5 py-0.5 rounded-full bg-discord-card text-zinc-300 border border-white/10 font-medium">Server Loading...</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="fetchBotData(true)" class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-semibold text-zinc-300 border border-white/10 transition flex items-center gap-1.5 cursor-pointer">
+            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+            <span>Sync</span>
+          </button>
+          <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="gatewayStatusText">Gateway: Connected</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- TAB CONTAINER -->
+      <div class="p-6 space-y-6 max-w-7xl mx-auto w-full">
+
+        <!-- ========================================== -->
+        <!-- TAB 1: OVERVIEW                            -->
+        <!-- ========================================== -->
+        <section id="tab-overview" class="space-y-6">
+          
+          <!-- Server Profile Banner -->
+          <div class="glass-box rounded-2xl p-6 relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div class="flex items-center gap-4">
+              <img id="guildIconImg" src="https://cdn.discordapp.com/icons/708892519882293279/a_0123456789.png" alt="" class="w-16 h-16 rounded-2xl bg-discord-dark object-cover border border-white/10">
+              <div>
+                <h3 id="guildTitle" class="text-xl font-extrabold text-white">THE SE7EN KINGDOMS</h3>
+                <p id="guildSub" class="text-xs text-zinc-400 font-mono mt-0.5">Guild ID: 708892519882293279 • Region: Global</p>
+                <div class="flex items-center gap-3 mt-2 text-xs font-medium">
+                  <span class="flex items-center gap-1.5 text-zinc-300">
+                    <span class="w-2 h-2 rounded-full bg-zinc-500"></span>
+                    <span id="statMembersCount">0 Members</span>
+                  </span>
+                  <span class="flex items-center gap-1.5 text-emerald-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span id="statOnlineCount">0 Online</span>
+                  </span>
+                  <span id="statBoostTier" class="px-2 py-0.5 rounded bg-discord-brand/20 text-discord-brand text-[11px] font-bold">Tier 0</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5">
+              <button onclick="switchTab('routing')" class="px-4 py-2 rounded-xl bg-discord-brand hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-discord-brand/20 cursor-pointer">
+                Configure Channel Routing
+              </button>
+              <button onclick="switchTab('studio')" class="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold border border-white/10 transition cursor-pointer">
+                Open Embed Studio
+              </button>
+            </div>
+          </div>
+
+          <!-- Quick Metrics Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="glass-box rounded-2xl p-5 border-l-4 border-l-aura-emerald">
+              <div class="text-xs font-mono uppercase text-zinc-400">Total Dispatches</div>
+              <div id="statTotalDispatches" class="text-2xl font-extrabold text-white mt-1">0</div>
+              <div class="text-[11px] text-zinc-500 mt-1">Embeds sent via Discord API</div>
+            </div>
+            <div class="glass-box rounded-2xl p-5 border-l-4 border-l-aura-cyan">
+              <div class="text-xs font-mono uppercase text-zinc-400">Personal DMs</div>
+              <div id="statDMsSent" class="text-2xl font-extrabold text-white mt-1">0</div>
+              <div class="text-[11px] text-zinc-500 mt-1">Creator onboardings &amp; alerts</div>
+            </div>
+            <div class="glass-box rounded-2xl p-5 border-l-4 border-l-aura-amber">
+              <div class="text-xs font-mono uppercase text-zinc-400">Channel Broadcasts</div>
+              <div id="statChannelMsgs" class="text-2xl font-extrabold text-white mt-1">0</div>
+              <div class="text-[11px] text-zinc-500 mt-1">Tips, goals &amp; announcements</div>
+            </div>
+            <div class="glass-box rounded-2xl p-5 border-l-4 border-l-aura-purple">
+              <div class="text-xs font-mono uppercase text-zinc-400">Process Uptime</div>
+              <div id="statUptime" class="text-2xl font-extrabold text-white mt-1">0s</div>
+              <div class="text-[11px] text-zinc-500 mt-1">Node.js bot runtime</div>
+            </div>
+          </div>
+
+          <!-- Active Routing Summary Cards -->
+          <div class="glass-box rounded-2xl p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-base font-bold text-white">Channel Routing Summary</h4>
+                <p class="text-xs text-zinc-400">Each Auratip event type routes to its designated Discord channel</p>
+              </div>
+              <button onclick="switchTab('routing')" class="text-xs text-aura-cyan hover:underline font-bold">Edit Mappings →</button>
+            </div>
+
+            <div id="overviewRoutingGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Recent Dispatches -->
+          <div class="glass-box rounded-2xl p-6 space-y-4">
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-base font-bold text-white">Recent Dispatches</h4>
+                <p class="text-xs text-zinc-400">Live feed of outbound embeds and messages</p>
+              </div>
+              <button onclick="switchTab('dispatches')" class="text-xs text-discord-brand hover:underline font-bold">View Full Audit Log →</button>
+            </div>
+            <div id="overviewRecentList" class="space-y-2">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 2: CHANNEL ROUTING MATRIX (CORE!)      -->
+        <!-- ========================================== -->
+        <section id="tab-routing" class="hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-extrabold text-white">Channel Routing Matrix</h3>
+              <p class="text-xs text-zinc-400">Assign dedicated Discord channels for each specific type of information and embed</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="saveRoutingConfig()" class="px-4 py-2.5 rounded-xl bg-discord-brand hover:bg-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-discord-brand/20 cursor-pointer flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                <span>Save All Changes</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Event Routing Cards -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+            <!-- 1. Live Tip Alerts -->
+            <div class="glass-box rounded-2xl p-6 border-l-4 border-l-aura-emerald space-y-4">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-aura-emerald"></span>
+                    <h4 class="text-base font-bold text-white">⚡ Live Tip Alerts</h4>
+                  </div>
+                  <p class="text-xs text-zinc-400 mt-1">Dispatched whenever a viewer tips a creator with 60 FPS alert</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="route-tip_alerts-enabled" class="sr-only peer" checked>
+                  <div class="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-aura-emerald"></div>
+                </label>
+              </div>
+
+              <div class="space-y-3 pt-2">
+                <div>
+                  <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Target Channel</label>
+                  <select id="route-tip_alerts-channel" class="w-full px-3 py-2.5 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono focus:border-aura-emerald focus:outline-none channel-select-dropdown">
+                    <option value="">Loading channels...</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Min Tip (₹)</label>
+                    <input type="number" id="route-tip_alerts-minAmount" placeholder="0 (all tips)" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                  </div>
+                  <div>
+                    <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Mention Role</label>
+                    <select id="route-tip_alerts-mention" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                      <option value="none">None (Silent)</option>
+                      <option value="here">@here</option>
+                      <option value="everyone">@everyone</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                  <span class="text-xs text-zinc-400">Embed Color: <span class="font-mono text-aura-emerald">#10B981</span></span>
+                  <button onclick="testRouting('tip_alerts')" class="px-3 py-1.5 rounded-lg bg-aura-emerald/15 hover:bg-aura-emerald/25 text-aura-emerald border border-aura-emerald/30 text-xs font-bold cursor-pointer transition">
+                    Send Test Embed
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Goal Celebrations -->
+            <div class="glass-box rounded-2xl p-6 border-l-4 border-l-aura-amber space-y-4">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-aura-amber"></span>
+                    <h4 class="text-base font-bold text-white">🎉 Stream Goal Milestones</h4>
+                  </div>
+                  <p class="text-xs text-zinc-400 mt-1">Dispatched when a creator reaches 100% of their stream donation goal</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="route-goal_celebrations-enabled" class="sr-only peer" checked>
+                  <div class="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-aura-amber"></div>
+                </label>
+              </div>
+
+              <div class="space-y-3 pt-2">
+                <div>
+                  <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Target Channel</label>
+                  <select id="route-goal_celebrations-channel" class="w-full px-3 py-2.5 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono focus:border-aura-amber focus:outline-none channel-select-dropdown">
+                    <option value="">Loading channels...</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Mention Role</label>
+                    <select id="route-goal_celebrations-mention" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                      <option value="here">@here</option>
+                      <option value="none">None (Silent)</option>
+                      <option value="everyone">@everyone</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Embed Color</label>
+                    <input type="text" id="route-goal_celebrations-color" value="#F59E0B" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                  <span class="text-xs text-zinc-400">Includes celebration progress bar</span>
+                  <button onclick="testRouting('goal_celebrations')" class="px-3 py-1.5 rounded-lg bg-aura-amber/15 hover:bg-aura-amber/25 text-aura-amber border border-aura-amber/30 text-xs font-bold cursor-pointer transition">
+                    Send Test Embed
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Creator Onboarding & Elite Welcome -->
+            <div class="glass-box rounded-2xl p-6 border-l-4 border-l-aura-cyan space-y-4">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-aura-cyan"></span>
+                    <h4 class="text-base font-bold text-white">🚀 Creator Onboarding &amp; Verification</h4>
+                  </div>
+                  <p class="text-xs text-zinc-400 mt-1">Personal DMs with OBS keys (Strict Privacy) + Public Welcome Embed</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="route-creator_onboarding-enabled" class="sr-only peer" checked>
+                  <div class="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-aura-cyan"></div>
+                </label>
+              </div>
+
+              <div class="space-y-3 pt-2">
+                <div>
+                  <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Public Welcome Channel (NO Credentials)</label>
+                  <select id="route-creator_onboarding-channel" class="w-full px-3 py-2.5 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono focus:border-aura-cyan focus:outline-none channel-select-dropdown">
+                    <option value="">Loading channels...</option>
+                  </select>
+                </div>
+
+                <div class="p-3 rounded-xl bg-aura-cyan/5 border border-aura-cyan/20 text-[11px] text-aura-cyan leading-relaxed">
+                  🔒 <strong>Confidentiality Enforced</strong>: Streamer credentials, passwords and OBS keys are ALWAYS delivered exclusively through verified Discord Personal DMs and are NEVER posted publicly.
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                  <span class="text-xs text-zinc-400">Welcome channel broadcast</span>
+                  <button onclick="testRouting('creator_onboarding')" class="px-3 py-1.5 rounded-lg bg-aura-cyan/15 hover:bg-aura-cyan/25 text-aura-cyan border border-aura-cyan/30 text-xs font-bold cursor-pointer transition">
+                    Send Test Embed
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. Creator Stream Boosts -->
+            <div class="glass-box rounded-2xl p-6 border-l-4 border-l-aura-purple space-y-4">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-aura-purple"></span>
+                    <h4 class="text-base font-bold text-white">🔥 Creator Stream Boosts</h4>
+                  </div>
+                  <p class="text-xs text-zinc-400 mt-1">Dispatched when a streamer is spotlighted or boosted on the front page</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="route-creator_boosts-enabled" class="sr-only peer" checked>
+                  <div class="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-aura-purple"></div>
+                </label>
+              </div>
+
+              <div class="space-y-3 pt-2">
+                <div>
+                  <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Target Channel</label>
+                  <select id="route-creator_boosts-channel" class="w-full px-3 py-2.5 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono focus:border-aura-purple focus:outline-none channel-select-dropdown">
+                    <option value="">Loading channels...</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Mention Role</label>
+                    <select id="route-creator_boosts-mention" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                      <option value="none">None (Silent)</option>
+                      <option value="here">@here</option>
+                      <option value="everyone">@everyone</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Embed Color</label>
+                    <input type="text" id="route-creator_boosts-color" value="#8B5CF6" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                  <span class="text-xs text-zinc-400">Streamer Spotlight link</span>
+                  <button onclick="testRouting('creator_boosts')" class="px-3 py-1.5 rounded-lg bg-aura-purple/15 hover:bg-aura-purple/25 text-aura-purple border border-aura-purple/30 text-xs font-bold cursor-pointer transition">
+                    Send Test Embed
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. Platform Announcements -->
+            <div class="glass-box rounded-2xl p-6 border-l-4 border-l-aura-magenta space-y-4">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-aura-magenta"></span>
+                    <h4 class="text-base font-bold text-white">📢 Official Platform Announcements</h4>
+                  </div>
+                  <p class="text-xs text-zinc-400 mt-1">Dispatched for platform releases, maintenance notices and events</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="route-platform_broadcasts-enabled" class="sr-only peer" checked>
+                  <div class="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-aura-magenta"></div>
+                </label>
+              </div>
+
+              <div class="space-y-3 pt-2">
+                <div>
+                  <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Target Channel</label>
+                  <select id="route-platform_broadcasts-channel" class="w-full px-3 py-2.5 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono focus:border-aura-magenta focus:outline-none channel-select-dropdown">
+                    <option value="">Loading channels...</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Mention Role</label>
+                    <select id="route-platform_broadcasts-mention" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                      <option value="everyone">@everyone</option>
+                      <option value="here">@here</option>
+                      <option value="none">None (Silent)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Embed Color</label>
+                    <input type="text" id="route-platform_broadcasts-color" value="#EC4899" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                  <span class="text-xs text-zinc-400">Server-wide broadcast</span>
+                  <button onclick="testRouting('platform_broadcasts')" class="px-3 py-1.5 rounded-lg bg-aura-magenta/15 hover:bg-aura-magenta/25 text-aura-magenta border border-aura-magenta/30 text-xs font-bold cursor-pointer transition">
+                    Send Test Embed
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 6. Security & Audit Alerts -->
+            <div class="glass-box rounded-2xl p-6 border-l-4 border-l-aura-rose space-y-4">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-aura-rose"></span>
+                    <h4 class="text-base font-bold text-white">🛡️ Security &amp; Audit Logs</h4>
+                  </div>
+                  <p class="text-xs text-zinc-400 mt-1">Dispatched for circuit breaker trips, fee changes, admin audits</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="route-audit_alerts-enabled" class="sr-only peer" checked>
+                  <div class="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-aura-rose"></div>
+                </label>
+              </div>
+
+              <div class="space-y-3 pt-2">
+                <div>
+                  <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Admin Log Channel</label>
+                  <select id="route-audit_alerts-channel" class="w-full px-3 py-2.5 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono focus:border-aura-rose focus:outline-none channel-select-dropdown">
+                    <option value="">Loading channels...</option>
+                  </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Mention Role</label>
+                    <select id="route-audit_alerts-mention" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                      <option value="none">None (Silent)</option>
+                      <option value="here">@here</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-mono uppercase text-zinc-400 mb-1">Embed Color</label>
+                    <input type="text" id="route-audit_alerts-color" value="#EF4444" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                  </div>
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                  <span class="text-xs text-zinc-400">Admin audit trail</span>
+                  <button onclick="testRouting('audit_alerts')" class="px-3 py-1.5 rounded-lg bg-aura-rose/15 hover:bg-aura-rose/25 text-aura-rose border border-aura-rose/30 text-xs font-bold cursor-pointer transition">
+                    Send Test Embed
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 3: EMBED STUDIO & DISPATCHER           -->
+        <!-- ========================================== -->
+        <section id="tab-studio" class="hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-extrabold text-white">Interactive Embed Studio</h3>
+              <p class="text-xs text-zinc-400">Compose, customize and dispatch rich Discord embeds with live preview</p>
+            </div>
+            
+            <!-- Quick Preset Buttons -->
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-xs text-zinc-500 mr-1">Presets:</span>
+              <button onclick="loadPreset('tip')" class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-aura-emerald border border-white/10">⚡ Tip Alert</button>
+              <button onclick="loadPreset('goal')" class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-aura-amber border border-white/10">🎉 Milestone</button>
+              <button onclick="loadPreset('welcome')" class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-aura-cyan border border-white/10">🚀 Streamer Welcome</button>
+              <button onclick="loadPreset('broadcast')" class="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-bold text-aura-magenta border border-white/10">📢 Notice</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            <!-- Left Side: Embed Form Controls (7 cols) -->
+            <div class="lg:col-span-7 space-y-4">
+              
+              <!-- Target Configuration -->
+              <div class="glass-box rounded-2xl p-5 space-y-4">
+                <div class="text-xs font-mono uppercase tracking-wider text-zinc-400 font-bold">1. Dispatch Target</div>
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs text-zinc-400 mb-1">Target Type</label>
+                    <select id="studioTargetType" onchange="handleTargetTypeChange()" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                      <option value="channel">Discord Channel</option>
+                      <option value="dm">Personal Direct Message (DM)</option>
+                    </select>
+                  </div>
+                  <div id="studioChannelWrap">
+                    <label class="block text-xs text-zinc-400 mb-1">Select Channel</label>
+                    <select id="studioTargetChannel" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono channel-select-dropdown">
+                      <option value="">Select text channel...</option>
+                    </select>
+                  </div>
+                  <div id="studioDmWrap" class="hidden">
+                    <label class="block text-xs text-zinc-400 mb-1">User ID / Username</label>
+                    <input type="text" id="studioTargetUser" placeholder="e.g. gr8ansh or 708892322569519132" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-xs text-zinc-400 mb-1">Message Content (Outside Embed / Pings)</label>
+                  <input type="text" id="studioContent" oninput="updateLivePreview()" placeholder="e.g. @here 🎉 Check this out!" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                </div>
+              </div>
+
+              <!-- Embed Main Fields -->
+              <div class="glass-box rounded-2xl p-5 space-y-4">
+                <div class="text-xs font-mono uppercase tracking-wider text-zinc-400 font-bold">2. Embed Details</div>
+
+                <div class="grid grid-cols-3 gap-3">
+                  <div class="col-span-2">
+                    <label class="block text-xs text-zinc-400 mb-1">Embed Title</label>
+                    <input type="text" id="studioTitle" oninput="updateLivePreview()" value="⚡ LIVE TIP ALERT: ₹500 for @ANSH!" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-semibold">
+                  </div>
+                  <div>
+                    <label class="block text-xs text-zinc-400 mb-1">Accent Color</label>
+                    <div class="flex items-center gap-2">
+                      <input type="color" id="studioColorPicker" oninput="studioColorText.value = this.value; updateLivePreview()" value="#00F0FF" class="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0">
+                      <input type="text" id="studioColorText" oninput="studioColorPicker.value = this.value; updateLivePreview()" value="#00F0FF" class="w-full px-2 py-1.5 rounded-lg bg-discord-input border border-white/10 text-white text-xs font-mono">
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-xs text-zinc-400 mb-1">Embed URL (Clickable Title)</label>
+                  <input type="text" id="studioUrl" oninput="updateLivePreview()" value="https://auratip.live/@ansh" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                </div>
+
+                <div>
+                  <label class="block text-xs text-zinc-400 mb-1">Description (Markdown Supported)</label>
+                  <textarea id="studioDesc" rows="3" oninput="updateLivePreview()" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-sans">**Demon King** just dropped an **EMERALD AURA** tip with 60 FPS live stream alert!</textarea>
+                </div>
+
+                <!-- Custom Fields List -->
+                <div class="space-y-2 pt-2 border-t border-white/5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-mono uppercase text-zinc-400">Embed Fields</span>
+                    <button type="button" onclick="addStudioField()" class="text-xs text-aura-cyan hover:underline font-bold">+ Add Field</button>
+                  </div>
+                  <div id="studioFieldsList" class="space-y-2">
+                    <!-- Field rows dynamically rendered -->
+                  </div>
+                </div>
+
+                <!-- Author & Footer & Media -->
+                <div class="grid grid-cols-2 gap-3 pt-2 border-t border-white/5">
+                  <div>
+                    <label class="block text-xs text-zinc-400 mb-1">Author Name</label>
+                    <input type="text" id="studioAuthorName" oninput="updateLivePreview()" value="AuraTip Streaming Engine" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                  </div>
+                  <div>
+                    <label class="block text-xs text-zinc-400 mb-1">Footer Text</label>
+                    <input type="text" id="studioFooterText" oninput="updateLivePreview()" value="AuraTip Real-Time Stream Engine • 60 FPS Alerts" class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                  <div>
+                    <label class="block text-xs text-zinc-400 mb-1">Thumbnail URL</label>
+                    <input type="text" id="studioThumbnail" oninput="updateLivePreview()" placeholder="https://..." class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                  </div>
+                  <div>
+                    <label class="block text-xs text-zinc-400 mb-1">Image Banner URL</label>
+                    <input type="text" id="studioImage" oninput="updateLivePreview()" placeholder="https://..." class="w-full px-3 py-2 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono">
+                  </div>
+                </div>
+
+                <button onclick="dispatchStudioEmbed()" class="w-full py-3.5 rounded-xl bg-discord-brand hover:bg-indigo-500 text-white font-extrabold text-sm uppercase tracking-wider transition shadow-lg shadow-discord-brand/25 flex items-center justify-center gap-2 cursor-pointer mt-4">
+                  <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                  <span>Dispatch Embed to Discord</span>
+                </button>
+              </div>
+
+            </div>
+
+            <!-- Right Side: Real-Time Discord Live Preview (5 cols) -->
+            <div class="lg:col-span-5 space-y-3 sticky top-20">
+              <div class="flex items-center justify-between px-1">
+                <span class="text-xs font-mono uppercase tracking-wider text-zinc-400 font-bold">Discord Live Preview</span>
+                <span class="text-[11px] text-zinc-500">Real-Time Client Simulator</span>
+              </div>
+
+              <!-- Authentic Discord Chat Window Simulator -->
+              <div class="bg-discord-chat rounded-2xl p-5 border border-discord-border space-y-3 shadow-2xl">
+                
+                <!-- Chat Message Header -->
+                <div class="flex items-start gap-3">
+                  <img src="https://cdn.discordapp.com/app-icons/1561385016766758973/99d05448ccd5619290467abdcc859763.png" alt="" class="w-10 h-10 rounded-full flex-shrink-0 cursor-pointer hover:opacity-80">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="text-sm font-bold text-white hover:underline cursor-pointer">Auratip Bot</span>
+                      <span class="badge-bot">BOT</span>
+                      <span class="text-[11px] text-zinc-400 ml-1">Today at 9:00 PM</span>
+                    </div>
+
+                    <!-- Outside Message Content -->
+                    <div id="previewContent" class="text-xs text-zinc-200 mt-1 whitespace-pre-wrap leading-relaxed"></div>
+
+                    <!-- Embed Card -->
+                    <div id="previewEmbedCard" class="discord-embed-card p-4 mt-2 max-w-md space-y-3 relative overflow-hidden">
+                      
+                      <!-- Author -->
+                      <div id="previewAuthor" class="text-[11px] font-semibold text-zinc-300 flex items-center gap-1.5">
+                        <span>AuraTip Streaming Engine</span>
+                      </div>
+
+                      <!-- Title -->
+                      <div class="flex items-start justify-between gap-3">
+                        <a id="previewTitle" href="#" target="_blank" class="text-sm font-bold text-white hover:underline hover:text-aura-cyan transition leading-snug">
+                          ⚡ LIVE TIP ALERT: ₹500 for @ANSH!
+                        </a>
+                        <img id="previewThumbnail" src="" alt="" class="hidden w-14 h-14 rounded-lg object-cover flex-shrink-0">
+                      </div>
+
+                      <!-- Description -->
+                      <div id="previewDesc" class="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">
+                        **Demon King** just dropped an **EMERALD AURA** tip with 60 FPS live stream alert!
+                      </div>
+
+                      <!-- Fields Grid -->
+                      <div id="previewFieldsGrid" class="grid grid-cols-2 gap-2 text-xs pt-1">
+                        <!-- Rendered fields -->
+                      </div>
+
+                      <!-- Image Banner -->
+                      <img id="previewImage" src="" alt="" class="hidden w-full rounded-lg max-h-48 object-cover pt-1">
+
+                      <!-- Footer & Timestamp -->
+                      <div id="previewFooter" class="text-[10px] text-zinc-400 pt-1 flex items-center gap-1.5">
+                        <span>AuraTip Real-Time Stream Engine • 60 FPS Alerts</span>
+                        <span>•</span>
+                        <span>Today at 9:00 PM</span>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+
+              </div>
+
+              <div class="p-3 rounded-xl bg-white/5 border border-white/5 text-[11px] text-zinc-400 flex items-center gap-2">
+                <svg class="w-4 h-4 text-aura-cyan flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span>Preview matches Discord Desktop &amp; Mobile client embed formatting.</span>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 4: MEMBER SEARCH & DM TOOL             -->
+        <!-- ========================================== -->
+        <section id="tab-members" class="hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-extrabold text-white">Member Intelligence &amp; DM Tool</h3>
+              <p class="text-xs text-zinc-400">Search server members, resolve Snowflake User IDs, and dispatch confidential DMs</p>
+            </div>
+            
+            <div class="flex items-center gap-2 w-full sm:w-80">
+              <input type="text" id="memberSearchInput" onkeydown="if(event.key==='Enter') searchMembers()" placeholder="Search username, nick, ID..." class="w-full px-4 py-2.5 rounded-xl bg-discord-input border border-white/10 text-white text-xs font-mono focus:border-discord-brand focus:outline-none">
+              <button onclick="searchMembers()" class="px-4 py-2.5 rounded-xl bg-discord-brand hover:bg-indigo-500 text-white text-xs font-bold transition cursor-pointer">
+                Search
+              </button>
+            </div>
+          </div>
+
+          <div class="glass-box rounded-2xl p-6 space-y-4">
+            <div class="text-xs font-mono uppercase text-zinc-400 font-bold">Search Results</div>
+            <div id="membersResultsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div class="col-span-full py-12 text-center text-xs text-zinc-500 font-mono">
+                Enter a username or nickname above to query the Discord Guild Member API
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 5: DISPATCH AUDIT LOG                  -->
+        <!-- ========================================== -->
+        <section id="tab-dispatches" class="hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-extrabold text-white">Dispatch Audit Trail</h3>
+              <p class="text-xs text-zinc-400">Chronological history of every embed and direct message delivered</p>
+            </div>
+            <button onclick="fetchDispatches()" class="px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold border border-white/10 transition cursor-pointer">
+              Refresh Log
+            </button>
+          </div>
+
+          <div class="glass-box rounded-2xl overflow-hidden">
+            <div class="overflow-x-auto">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-discord-card border-b border-discord-border text-zinc-400 font-mono uppercase text-[10px]">
+                  <tr>
+                    <th class="px-4 py-3">Timestamp</th>
+                    <th class="px-4 py-3">Type</th>
+                    <th class="px-4 py-3">Target</th>
+                    <th class="px-4 py-3">Status</th>
+                    <th class="px-4 py-3">Latency</th>
+                    <th class="px-4 py-3">Message ID</th>
+                    <th class="px-4 py-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="dispatchesTableBody" class="divide-y divide-white/5 font-mono">
+                  <tr><td colspan="7" class="px-4 py-8 text-center text-zinc-500">Loading dispatch history...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- TAB 6: PLATFORM BRIDGE & BOT SETTINGS      -->
+        <!-- ========================================== -->
+        <section id="tab-bridge" class="hidden space-y-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h3 class="text-xl font-extrabold text-white">AuraTip Platform Bridge</h3>
+              <p class="text-xs text-zinc-400">Real-time webhook and synchronization bridge between AuraTip and Discord Bot</p>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            
+            <!-- Bridge Status Card -->
+            <div class="glass-box rounded-2xl p-6 space-y-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-aura-cyan/15 border border-aura-cyan/30 flex items-center justify-center text-aura-cyan">
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                </div>
+                <div>
+                  <h4 class="text-base font-bold text-white">Bridge Connectivity</h4>
+                  <p class="text-xs text-zinc-400">Direct IPC &amp; Webhook listener</p>
+                </div>
+              </div>
+
+              <div class="space-y-2.5 text-xs font-mono">
+                <div class="flex items-center justify-between p-2.5 rounded-xl bg-discord-card">
+                  <span class="text-zinc-400">AuraTip Platform URL:</span>
+                  <a href="http://localhost:3000" target="_blank" class="text-aura-cyan hover:underline">http://localhost:3000</a>
+                </div>
+                <div class="flex items-center justify-between p-2.5 rounded-xl bg-discord-card">
+                  <span class="text-zinc-400">Bot Dashboard URL:</span>
+                  <span class="text-white">http://localhost:3001</span>
+                </div>
+                <div class="flex items-center justify-between p-2.5 rounded-xl bg-discord-card">
+                  <span class="text-zinc-400">Inbound Event Webhook:</span>
+                  <span class="text-emerald-400">POST /api/webhook/auratip-event</span>
+                </div>
+              </div>
+
+              <div class="pt-2">
+                <button onclick="reconnectBot()" class="w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold border border-white/10 transition cursor-pointer">
+                  Reconnect Discord Gateway
+                </button>
+              </div>
+            </div>
+
+            <!-- Bot Permissions & Invite -->
+            <div class="glass-box rounded-2xl p-6 space-y-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-discord-brand/15 border border-discord-brand/30 flex items-center justify-center text-discord-brand">
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+                </div>
+                <div>
+                  <h4 class="text-base font-bold text-white">Bot Invitation Link</h4>
+                  <p class="text-xs text-zinc-400">Invite bot to new servers with required scopes</p>
+                </div>
+              </div>
+
+              <div class="p-3 rounded-xl bg-discord-card text-xs font-mono text-zinc-300 break-all select-all">
+                https://discord.com/oauth2/authorize?client_id=1561385016766758973&permissions=534723950656&scope=bot%20applications.commands
+              </div>
+
+              <a href="https://discord.com/oauth2/authorize?client_id=1561385016766758973&permissions=534723950656&scope=bot%20applications.commands" target="_blank" class="w-full py-2.5 rounded-xl bg-discord-brand hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer text-center">
+                <span>Authorize &amp; Invite Bot ↗</span>
+              </a>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+    </main>
+
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ========================================== -->
+  <!-- JAVASCRIPT APPLICATION LOGIC               -->
+  <!-- ========================================== -->
+  <script>
+    let authToken = localStorage.getItem('auratip_bot_token') || '';
+    let guildChannels = [];
+    let routingConfig = {};
+    let studioFields = [
+      { name: "Supporter", value: "Demon King", inline: true },
+      { name: "Amount", value: "₹500 (INR)", inline: true },
+      { name: "Aura Tier", value: "EMERALD ⚡", inline: true }
+    ];
+
+    // Initialize application
+    window.addEventListener('DOMContentLoaded', () => {
+      renderStudioFields();
+      updateLivePreview();
+      if (authToken) {
+        verifySession();
+      } else {
+        document.getElementById('loginModal').classList.remove('hidden');
+      }
+    });
+
+    // ── Authentication ───────────────────────────────────────────
+    async function handleLogin(e) {
+      e.preventDefault();
+      const password = document.getElementById('passcodeInput').value.trim();
+      const errBox = document.getElementById('loginError');
+      errBox.classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || 'Authentication failed');
+
+        authToken = data.token;
+        localStorage.setItem('auratip_bot_token', authToken);
+        document.getElementById('loginModal').classList.add('hidden');
+        document.getElementById('appShell').classList.remove('hidden');
+        fetchBotData();
+        showToast('Authenticated successfully', 'success');
+      } catch (err) {
+        errBox.textContent = err.message;
+        errBox.classList.remove('hidden');
+      }
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('auratip_bot_token');
+      authToken = '';
+      location.reload();
+    }
+
+    async function verifySession() {
+      try {
+        const res = await fetch('/api/bot/status', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) throw new Error('Session expired');
+        document.getElementById('loginModal').classList.add('hidden');
+        document.getElementById('appShell').classList.remove('hidden');
+        fetchBotData();
+      } catch (e) {
+        localStorage.removeItem('auratip_bot_token');
+        authToken = '';
+        document.getElementById('loginModal').classList.remove('hidden');
+      }
+    }
+
+    // ── Navigation ───────────────────────────────────────────────
+    function switchTab(tabId) {
+      const tabs = ['overview', 'routing', 'studio', 'members', 'dispatches', 'bridge'];
+      tabs.forEach(t => {
+        const el = document.getElementById(`tab-${t}`);
+        const btn = document.getElementById(`nav-${t}`);
+        if (el) el.classList.toggle('hidden', t !== tabId);
+        if (btn) {
+          if (t === tabId) {
+            btn.className = 'nav-btn w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition text-discord-brand bg-discord-brand/10 border border-discord-brand/20';
+          } else {
+            btn.className = 'nav-btn w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition text-zinc-400 hover:text-white hover:bg-white/5';
+          }
+        }
+      });
+
+      const titleMap = {
+        overview: 'Overview',
+        routing: 'Channel Routing Matrix',
+        studio: 'Interactive Embed Studio',
+        members: 'Member Intelligence & DM Tool',
+        dispatches: 'Dispatch Audit Trail',
+        bridge: 'AuraTip Platform Bridge'
+      };
+      document.getElementById('pageTitle').textContent = titleMap[tabId] || 'Dashboard';
+      if (tabId === 'dispatches') fetchDispatches();
+    }
+
+    // ── Fetch Bot, Guild & Routing Data ───────────────────────────
+    async function fetchBotData(silent = false) {
+      try {
+        const [statusRes, guildRes, channelsRes, routingRes] = await Promise.all([
+          fetch('/api/bot/status', { headers: { 'Authorization': `Bearer ${authToken}` } }),
+          fetch('/api/guild/info', { headers: { 'Authorization': `Bearer ${authToken}` } }),
+          fetch('/api/guild/channels', { headers: { 'Authorization': `Bearer ${authToken}` } }),
+          fetch('/api/routing', { headers: { 'Authorization': `Bearer ${authToken}` } })
+        ]);
+
+        const status = await statusRes.json();
+        const guild = await guildRes.json();
+        const chData = await channelsRes.json();
+        const routeData = await routingRes.json();
+
+        // Update status indicators
+        if (status.isOnline) {
+          document.getElementById('gatewayStatusText').textContent = 'Gateway: Online';
+          document.getElementById('botUserTag').textContent = status.botUser?.tag || 'Online';
+        }
+
+        // Update guild header
+        if (guild && guild.name) {
+          document.getElementById('guildTitle').textContent = guild.name;
+          document.getElementById('guildNameHeader').textContent = guild.name;
+          document.getElementById('statMembersCount').textContent = `${guild.memberCount || 0} Members`;
+          document.getElementById('statOnlineCount').textContent = `${guild.onlineCount || 0} Online`;
+          document.getElementById('statBoostTier').textContent = `Tier ${guild.boostLevel || 0}`;
+          if (guild.icon) document.getElementById('guildIconImg').src = guild.icon;
+        }
+
+        // Update stats
+        if (status.stats) {
+          document.getElementById('statTotalDispatches').textContent = status.stats.totalDispatched || 0;
+          document.getElementById('statDMsSent').textContent = status.stats.dmsSent || 0;
+          document.getElementById('statChannelMsgs').textContent = status.stats.channelMessagesSent || 0;
+        }
+        document.getElementById('statUptime').textContent = `${status.processUptime || 0}s`;
+
+        // Update channels list
+        guildChannels = chData.channels || [];
+        populateChannelDropdowns();
+
+        // Update routing config
+        if (routeData.routing) {
+          routingConfig = routeData.routing;
+          applyRoutingConfigToUI();
+          renderOverviewRouting();
+        }
+
+        fetchRecentDispatches();
+        if (silent) showToast('Data synchronized from Discord API', 'info');
+      } catch (err) {
+        console.error('fetchBotData error:', err);
+      }
+    }
+
+    function populateChannelDropdowns() {
+      const dropdowns = document.querySelectorAll('.channel-select-dropdown');
+      dropdowns.forEach(dd => {
+        const currentVal = dd.value;
+        dd.innerHTML = '<option value="">-- Select Channel --</option>' +
+          guildChannels.map(c => `<option value="${c.id}"># ${c.name}</option>`).join('');
+        if (currentVal) dd.value = currentVal;
+      });
+    }
+
+    function applyRoutingConfigToUI() {
+      const categories = ['tip_alerts', 'goal_celebrations', 'creator_onboarding', 'creator_boosts', 'platform_broadcasts', 'audit_alerts'];
+      categories.forEach(cat => {
+        const conf = routingConfig[cat];
+        if (!conf) return;
+
+        const enEl = document.getElementById(`route-${cat}-enabled`);
+        const chEl = document.getElementById(`route-${cat}-channel`);
+        const mnEl = document.getElementById(`route-${cat}-mention`);
+        const minEl = document.getElementById(`route-${cat}-minAmount`);
+        const colEl = document.getElementById(`route-${cat}-color`);
+
+        if (enEl) enEl.checked = conf.enabled !== false;
+        if (chEl && conf.channelId) chEl.value = conf.channelId;
+        if (mnEl && conf.mention) mnEl.value = conf.mention;
+        if (minEl && conf.minAmount !== undefined) minEl.value = conf.minAmount;
+        if (colEl && conf.color) colEl.value = conf.color;
+      });
+    }
+
+    function renderOverviewRouting() {
+      const container = document.getElementById('overviewRoutingGrid');
+      if (!container) return;
+
+      const titles = {
+        tip_alerts: { name: 'Live Tip Alerts', icon: '⚡', color: 'text-aura-emerald' },
+        goal_celebrations: { name: 'Stream Milestones', icon: '🎉', color: 'text-aura-amber' },
+        creator_onboarding: { name: 'Streamer Onboarding', icon: '🚀', color: 'text-aura-cyan' },
+        creator_boosts: { name: 'Stream Boosts', icon: '🔥', color: 'text-aura-purple' },
+        platform_broadcasts: { name: 'Announcements', icon: '📢', color: 'text-aura-magenta' },
+        audit_alerts: { name: 'Audit Logs', icon: '🛡️', color: 'text-aura-rose' }
+      };
+
+      container.innerHTML = Object.keys(titles).map(key => {
+        const meta = titles[key];
+        const conf = routingConfig[key] || {};
+        const ch = guildChannels.find(c => c.id === conf.channelId);
+        const chName = ch ? `#${ch.name}` : (conf.channelId ? `#${conf.channelId}` : 'Not assigned');
+        const isActive = conf.enabled !== false;
+
+        return `
+          <div class="p-3.5 rounded-xl bg-discord-card border border-white/5 space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>${meta.icon}</span>
+                <span class="${meta.color}">${meta.name}</span>
+              </span>
+              <span class="w-2 h-2 rounded-full ${isActive ? 'bg-emerald-400' : 'bg-zinc-600'}"></span>
+            </div>
+            <div class="text-[11px] font-mono text-zinc-400 truncate">
+              Route: <span class="text-white">${chName}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function saveRoutingConfig() {
+      const updated = {};
+      const categories = ['tip_alerts', 'goal_celebrations', 'creator_onboarding', 'creator_boosts', 'platform_broadcasts', 'audit_alerts'];
+      
+      categories.forEach(cat => {
+        const enEl = document.getElementById(`route-${cat}-enabled`);
+        const chEl = document.getElementById(`route-${cat}-channel`);
+        const mnEl = document.getElementById(`route-${cat}-mention`);
+        const minEl = document.getElementById(`route-${cat}-minAmount`);
+        const colEl = document.getElementById(`route-${cat}-color`);
+
+        updated[cat] = {
+          ...routingConfig[cat],
+          enabled: enEl ? enEl.checked : true,
+          channelId: chEl ? chEl.value : '',
+          mention: mnEl ? mnEl.value : 'none'
+        };
+        if (minEl && minEl.value !== '') updated[cat].minAmount = Number(minEl.value);
+        if (colEl && colEl.value) updated[cat].color = colEl.value;
+      });
+
+      try {
+        const res = await fetch('/api/routing', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ routing: updated })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to save');
+        routingConfig = data.routing;
+        renderOverviewRouting();
+        showToast('Channel routing matrix saved successfully', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    async function testRouting(category) {
+      try {
+        showToast(`Sending test embed to ${category}...`, 'info');
+        const res = await fetch(`/api/routing/test/${category}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Test failed');
+        showToast(`Test embed delivered! Message ID: ${data.result?.messageId || 'Success'}`, 'success');
+        fetchRecentDispatches();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    // ── Embed Studio Logic ───────────────────────────────────────
+    function handleTargetTypeChange() {
+      const type = document.getElementById('studioTargetType').value;
+      document.getElementById('studioChannelWrap').classList.toggle('hidden', type !== 'channel');
+      document.getElementById('studioDmWrap').classList.toggle('hidden', type !== 'dm');
+    }
+
+    function renderStudioFields() {
+      const container = document.getElementById('studioFieldsList');
+      if (!container) return;
+      container.innerHTML = studioFields.map((f, i) => `
+        <div class="flex items-center gap-2 p-2 rounded-xl bg-discord-dark/50 border border-white/5">
+          <input type="text" placeholder="Name" value="${escapeHtml(f.name)}" oninput="studioFields[${i}].name = this.value; updateLivePreview()" class="w-1/3 px-2 py-1.5 rounded-lg bg-discord-input text-xs font-mono text-white border border-white/10">
+          <input type="text" placeholder="Value" value="${escapeHtml(f.value)}" oninput="studioFields[${i}].value = this.value; updateLivePreview()" class="flex-1 px-2 py-1.5 rounded-lg bg-discord-input text-xs font-mono text-white border border-white/10">
+          <label class="flex items-center gap-1 text-[11px] text-zinc-400">
+            <input type="checkbox" ${f.inline ? 'checked' : ''} onchange="studioFields[${i}].inline = this.checked; updateLivePreview()">
+            <span>Inline</span>
+          </label>
+          <button type="button" onclick="removeStudioField(${i})" class="text-zinc-500 hover:text-red-400 p-1">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function addStudioField() {
+      studioFields.push({ name: "Field Title", value: "Field Value", inline: true });
+      renderStudioFields();
+      updateLivePreview();
+    }
+
+    function removeStudioField(index) {
+      studioFields.splice(index, 1);
+      renderStudioFields();
+      updateLivePreview();
+    }
+
+    function updateLivePreview() {
+      const content = document.getElementById('studioContent').value;
+      const title = document.getElementById('studioTitle').value;
+      const url = document.getElementById('studioUrl').value;
+      const desc = document.getElementById('studioDesc').value;
+      const color = document.getElementById('studioColorPicker').value;
+      const author = document.getElementById('studioAuthorName').value;
+      const footer = document.getElementById('studioFooterText').value;
+      const thumb = document.getElementById('studioThumbnail').value;
+      const img = document.getElementById('studioImage').value;
+
+      // Update Preview DOM
+      document.getElementById('previewContent').textContent = content;
+      document.getElementById('previewTitle').textContent = title || 'Embed Title';
+      document.getElementById('previewTitle').href = url || '#';
+      document.getElementById('previewDesc').textContent = desc || '';
+      document.getElementById('previewAuthor').textContent = author || '';
+      document.getElementById('previewFooter').firstElementChild.textContent = footer || '';
+      document.getElementById('previewEmbedCard').style.borderLeftColor = color;
+
+      // Thumbnail
+      const thumbEl = document.getElementById('previewThumbnail');
+      if (thumb) {
+        thumbEl.src = thumb;
+        thumbEl.classList.remove('hidden');
+      } else {
+        thumbEl.classList.add('hidden');
+      }
+
+      // Image
+      const imgEl = document.getElementById('previewImage');
+      if (img) {
+        imgEl.src = img;
+        imgEl.classList.remove('hidden');
+      } else {
+        imgEl.classList.add('hidden');
+      }
+
+      // Fields
+      const fieldsGrid = document.getElementById('previewFieldsGrid');
+      fieldsGrid.innerHTML = studioFields.map(f => `
+        <div class="${f.inline ? 'col-span-1' : 'col-span-2'} space-y-0.5">
+          <div class="text-[11px] font-bold text-zinc-400">${escapeHtml(f.name)}</div>
+          <div class="text-xs text-white">${escapeHtml(f.value)}</div>
+        </div>
+      `).join('');
+    }
+
+    function loadPreset(type) {
+      if (type === 'tip') {
+        document.getElementById('studioTitle').value = "⚡ LIVE TIP ALERT: ₹500 for @ANSH!";
+        document.getElementById('studioDesc').value = "**Demon King** just dropped an **EMERALD AURA** tip with 60 FPS live stream alert!";
+        document.getElementById('studioColorPicker').value = "#10B981";
+        document.getElementById('studioColorText').value = "#10B981";
+        studioFields = [
+          { name: "Supporter", value: "Demon King", inline: true },
+          { name: "Amount", value: "₹500 (INR)", inline: true },
+          { name: "Aura Tier", value: "EMERALD ⚡", inline: true }
+        ];
+      } else if (type === 'goal') {
+        document.getElementById('studioTitle').value = "🎉 STREAM GOAL CRUSHED: @ANSH hit 100%!";
+        document.getElementById('studioDesc').value = "Huge congratulations! The streamer just achieved their ₹25,000 stream upgrade goal!";
+        document.getElementById('studioColorPicker').value = "#F59E0B";
+        document.getElementById('studioColorText').value = "#F59E0B";
+        studioFields = [
+          { name: "Target", value: "₹25,000", inline: true },
+          { name: "Raised", value: "₹25,400", inline: true },
+          { name: "Progress", value: "`[██████████]` 100%", inline: false }
+        ];
+      } else if (type === 'welcome') {
+        document.getElementById('studioTitle').value = "🚀 Welcome @ANSH to the AuraTip Partner Fleet!";
+        document.getElementById('studioDesc').value = "New streamer verified! 60 FPS animated alerts & instant UPI payouts are now live.";
+        document.getElementById('studioColorPicker').value = "#00F0FF";
+        document.getElementById('studioColorText').value = "#00F0FF";
+        studioFields = [
+          { name: "Public Tipping Link", value: "https://auratip.live/@ansh", inline: false }
+        ];
+      } else if (type === 'broadcast') {
+        document.getElementById('studioTitle').value = "📢 AuraTip Official Platform Notice";
+        document.getElementById('studioDesc').value = "Platform engine update v3.0 Ultra is now deployed with sub-millisecond alert delivery.";
+        document.getElementById('studioColorPicker').value = "#EC4899";
+        document.getElementById('studioColorText').value = "#EC4899";
+        studioFields = [
+          { name: "Status", value: "All Systems Operational ⚡", inline: true }
+        ];
+      }
+      renderStudioFields();
+      updateLivePreview();
+    }
+
+    async function dispatchStudioEmbed() {
+      const targetType = document.getElementById('studioTargetType').value;
+      const targetId = targetType === 'channel' 
+        ? document.getElementById('studioTargetChannel').value 
+        : document.getElementById('studioTargetUser').value.trim();
+
+      if (!targetId) {
+        showToast('Please select a target channel or enter a User ID', 'error');
+        return;
+      }
+
+      const payload = {
+        targetType,
+        targetId,
+        content: document.getElementById('studioContent').value,
+        embed: {
+          title: document.getElementById('studioTitle').value,
+          url: document.getElementById('studioUrl').value,
+          description: document.getElementById('studioDesc').value,
+          color: document.getElementById('studioColorPicker').value,
+          fields: studioFields,
+          authorName: document.getElementById('studioAuthorName').value,
+          footerText: document.getElementById('studioFooterText').value,
+          thumbnailUrl: document.getElementById('studioThumbnail').value,
+          imageUrl: document.getElementById('studioImage').value,
+          timestamp: true
+        }
+      };
+
+      try {
+        showToast('Dispatching embed to Discord...', 'info');
+        const res = await fetch('/api/embeds/dispatch-custom', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Dispatch failed');
+        showToast(`Delivered successfully! Message ID: ${data.result?.messageId || 'OK'}`, 'success');
+        fetchRecentDispatches();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    // ── Member Intelligence ──────────────────────────────────────
+    async function searchMembers() {
+      const q = document.getElementById('memberSearchInput').value.trim();
+      if (!q) return;
+
+      const container = document.getElementById('membersResultsList');
+      container.innerHTML = '<div class="col-span-full py-6 text-center text-xs text-zinc-400">Searching Discord Guild API...</div>';
+
+      try {
+        const res = await fetch(`/api/guild/members/search?q=${encodeURIComponent(q)}`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        if (!data.members || !data.members.length) {
+          container.innerHTML = '<div class="col-span-full py-6 text-center text-xs text-zinc-500">No members matched the search query in this server.</div>';
+          return;
+        }
+
+        container.innerHTML = data.members.map(m => `
+          <div class="glass-box rounded-xl p-4 flex items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <img src="${m.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png'}" alt="" class="w-10 h-10 rounded-full border border-white/10">
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-white truncate">${escapeHtml(m.globalName || m.username)}</div>
+                <div class="text-[10px] font-mono text-zinc-400">@${escapeHtml(m.username)}</div>
+                <div class="text-[10px] font-mono text-zinc-500 truncate">ID: ${m.id}</div>
+              </div>
+            </div>
+            <button onclick="promptQuickDm('${m.id}', '${escapeHtml(m.username)}')" class="px-3 py-1.5 rounded-lg bg-discord-brand/20 hover:bg-discord-brand/30 text-discord-brand text-xs font-bold transition flex-shrink-0 cursor-pointer">
+              Send DM
+            </button>
+          </div>
+        `).join('');
+      } catch (err) {
+        container.innerHTML = `<div class="col-span-full py-6 text-center text-xs text-red-400">Search error: ${err.message}</div>`;
+      }
+    }
+
+    async function promptQuickDm(userId, username) {
+      const msg = prompt(`Enter message to send via Personal DM to @${username} (${userId}):`);
+      if (!msg) return;
+
+      try {
+        const res = await fetch('/api/dispatch/dm', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            recipient: userId,
+            content: msg
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'DM failed');
+        showToast(`Personal DM delivered to @${username}!`, 'success');
+        fetchRecentDispatches();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    // ── Dispatch History ─────────────────────────────────────────
+    async function fetchDispatches() {
+      const tbody = document.getElementById('dispatchesTableBody');
+      try {
+        const res = await fetch('/api/dispatches?limit=50', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        if (!data.dispatches || !data.dispatches.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-center text-zinc-500">No dispatch history recorded yet.</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = data.dispatches.map(d => {
+          const isOk = String(d.status || '').includes('OK') || String(d.status || '').includes('DELIVERED') || d.success;
+          const statusBadge = isOk 
+            ? `<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold">${d.status || 'DELIVERED'}</span>`
+            : `<span class="px-2 py-0.5 rounded text-[10px] bg-red-500/10 text-red-400 border border-red-500/30 font-bold">${d.status || 'FAILED'}</span>`;
+
+          const dateStr = d.timestamp ? new Date(d.timestamp).toLocaleTimeString() : '—';
+
+          return `
+            <tr class="hover:bg-white/[0.02] transition">
+              <td class="px-4 py-3 text-zinc-400 whitespace-nowrap">${dateStr}</td>
+              <td class="px-4 py-3 text-white font-bold">${d.type || 'EMBED'}</td>
+              <td class="px-4 py-3 text-aura-cyan">${escapeHtml(d.target || '—')}</td>
+              <td class="px-4 py-3">${statusBadge}</td>
+              <td class="px-4 py-3 text-zinc-400">${d.latencyMs ? `${d.latencyMs}ms` : '—'}</td>
+              <td class="px-4 py-3 text-zinc-500 text-[10px] truncate max-w-xs">${d.messageId || '—'}</td>
+              <td class="px-4 py-3 text-right">
+                <button onclick="alert(JSON.stringify(${escapeHtml(JSON.stringify(d))}, null, 2))" class="text-zinc-400 hover:text-white text-[11px] underline">Inspect</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-8 text-center text-red-400">Error: ${err.message}</td></tr>`;
+      }
+    }
+
+    async function fetchRecentDispatches() {
+      const container = document.getElementById('overviewRecentList');
+      if (!container) return;
+
+      try {
+        const res = await fetch('/api/dispatches?limit=5', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        if (!data.dispatches || !data.dispatches.length) {
+          container.innerHTML = '<div class="text-xs text-zinc-500 py-3">No dispatches logged yet. Try testing a channel above!</div>';
+          return;
+        }
+
+        container.innerHTML = data.dispatches.map(d => `
+          <div class="p-3 rounded-xl bg-discord-card border border-white/5 flex items-center justify-between gap-3 text-xs">
+            <div class="flex items-center gap-3">
+              <span class="w-2 h-2 rounded-full ${d.success || String(d.status).includes('DELIVERED') ? 'bg-emerald-400' : 'bg-red-400'}"></span>
+              <div>
+                <span class="font-bold text-white font-mono">${d.type || 'DISPATCH'}</span>
+                <span class="text-zinc-400 font-mono ml-2">Target: ${escapeHtml(d.target || '—')}</span>
+              </div>
+            </div>
+            <div class="text-[11px] font-mono text-zinc-500">${d.timestamp ? new Date(d.timestamp).toLocaleTimeString() : ''}</div>
+          </div>
+        `).join('');
+      } catch (e) {}
+    }
+
+    async function reconnectBot() {
+      try {
+        showToast('Reconnecting Discord bot...', 'info');
+        const res = await fetch('/api/bot/reconnect', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Reconnect failed');
+        showToast('Discord Gateway reconnected successfully', 'success');
+        fetchBotData();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    }
+
+    // ── Toast Alerts ─────────────────────────────────────────────
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-500/90 text-white border-emerald-400',
+        error: 'bg-red-500/90 text-white border-red-400',
+        info: 'bg-discord-brand/90 text-white border-indigo-400'
+      };
+
+      toast.className = `${colors[type] || colors.info} pointer-events-auto px-4 py-3 rounded-xl shadow-2xl border text-xs font-semibold backdrop-blur-md transition-all duration-300 transform translate-y-2 opacity-0 flex items-center gap-2 max-w-sm`;
+      toast.innerHTML = `<span>${escapeHtml(message)}</span>`;
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+      });
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[m]);
+    }
+  </script>
+</body>
+</html>

@@ -9,6 +9,57 @@ const path = require('path');
 // When used standalone, data lives under the bot repo root.
 // When imported as a module by Auratip, the caller can override via setContext().
 const DISPATCH_LOG_FILE = path.join(__dirname, '..', 'data', 'dispatch-audit-log.json');
+const ROUTING_CONFIG_FILE = path.join(__dirname, '..', 'data', 'channel-routing.json');
+
+const DEFAULT_ROUTING = {
+  tip_alerts: {
+    enabled: true,
+    channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
+    minAmount: 0,
+    color: '#10B981',
+    mention: 'none',
+    titleTemplate: '⚡ LIVE TIP ALERT: ₹{amount} for @{creator}!',
+    showProgressBar: true
+  },
+  goal_celebrations: {
+    enabled: true,
+    channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
+    color: '#F59E0B',
+    mention: 'here',
+    titleTemplate: '🎉 STREAM GOAL CRUSHED: @{creator} hit 100%!',
+    showCelebrationBanner: true
+  },
+  creator_onboarding: {
+    enabled: true,
+    channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
+    sendPublicAnnouncement: true,
+    sendPrivateCredentialsDM: true,
+    color: '#00F0FF',
+    mention: 'none',
+    titleTemplate: '🚀 Welcome @{creator} to the AuraTip Streamer Network!'
+  },
+  creator_boosts: {
+    enabled: true,
+    channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
+    color: '#8B5CF6',
+    mention: 'none',
+    titleTemplate: '🔥 STREAM BOOSTED: @{creator} is now spotlighted!'
+  },
+  platform_broadcasts: {
+    enabled: true,
+    channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
+    color: '#EC4899',
+    mention: 'everyone',
+    titleTemplate: '📢 AuraTip Official Platform Notice'
+  },
+  audit_alerts: {
+    enabled: true,
+    channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
+    color: '#EF4444',
+    mention: 'none',
+    titleTemplate: '⚠️ AuraTip Security / System Alert'
+  }
+};
 
 // Ensure data directory exists
 function ensureDataDir() {
@@ -18,6 +69,9 @@ function ensureDataDir() {
   }
   if (!fs.existsSync(DISPATCH_LOG_FILE)) {
     fs.writeFileSync(DISPATCH_LOG_FILE, JSON.stringify([], null, 2));
+  }
+  if (!fs.existsSync(ROUTING_CONFIG_FILE)) {
+    fs.writeFileSync(ROUTING_CONFIG_FILE, JSON.stringify(DEFAULT_ROUTING, null, 2));
   }
 }
 
@@ -108,6 +162,41 @@ class AuraTipDiscordBot {
     } catch (err) {
       console.warn('[DiscordBot] Failed to write dispatch log:', err.message);
     }
+  }
+
+  // Get complete channel routing configuration
+  getRoutingConfig() {
+    try {
+      ensureDataDir();
+      const raw = fs.readFileSync(ROUTING_CONFIG_FILE, 'utf8');
+      const loaded = JSON.parse(raw);
+      return { ...DEFAULT_ROUTING, ...loaded };
+    } catch (e) {
+      return { ...DEFAULT_ROUTING };
+    }
+  }
+
+  // Save updated channel routing configuration
+  saveRoutingConfig(newConfig) {
+    try {
+      ensureDataDir();
+      const current = this.getRoutingConfig();
+      const merged = { ...current, ...newConfig };
+      fs.writeFileSync(ROUTING_CONFIG_FILE, JSON.stringify(merged, null, 2));
+      return merged;
+    } catch (err) {
+      console.warn('[DiscordBot] Failed to save routing config:', err.message);
+      throw err;
+    }
+  }
+
+  // Helper to format mention prefix
+  buildMentionString(mentionType) {
+    if (!mentionType || mentionType === 'none') return '';
+    if (mentionType === 'here') return '@here ';
+    if (mentionType === 'everyone') return '@everyone ';
+    if (/^\d+$/.test(mentionType)) return `<@&${mentionType}> `;
+    return '';
   }
 
   // Initialize bot connection
@@ -982,36 +1071,60 @@ class AuraTipDiscordBot {
     throw new Error(`Unable to deliver message to target "${clean}".`);
   }
 
-  // Live Tip Alert Broadcast to Discord Server
+  // Live Tip Alert Broadcast to Discord Server (using configured tip_alerts channel)
   async broadcastTipAlert(creator, tip) {
     if (!this.token && !this.webhookUrl) return;
 
+    const routing = this.getRoutingConfig();
+    const conf = routing.tip_alerts || DEFAULT_ROUTING.tip_alerts;
+    if (conf.enabled === false) return;
+
+    const amount = Number(tip.amount || 0);
+    if (conf.minAmount && amount < Number(conf.minAmount)) return;
+
+    const targetChannel = conf.channelId || this.channelId;
+    if (!targetChannel && !this.webhookUrl) return;
+
     const theme = (tip.auraTheme || 'emerald').toLowerCase();
-    const color = getAuraColor(theme);
+    const color = conf.color ? parseInt(conf.color.replace('#', ''), 16) : getAuraColor(theme);
     const supporter = tip.supporterName || tip.name || 'Anonymous';
-    const amountStr = `₹${tip.amount}`;
+    const amountStr = `₹${amount}`;
     const cleanHandle = (creator?.handle || 'creator').toLowerCase().replace(/^@/, '');
     const goalRaised = creator?.goalRaisedInr || 0;
     const goalTarget = creator?.goalTargetInr || 10000;
     const progress = getProgressBar(goalRaised, goalTarget);
 
+    const title = (conf.titleTemplate || '⚡ LIVE TIP ALERT: ₹{amount} for @{creator}!')
+      .replace('{amount}', amount)
+      .replace('{creator}', cleanHandle)
+      .replace('{supporter}', supporter);
+
+    const mentionPrefix = this.buildMentionString(conf.mention);
+
     const embed = {
-      title: `⚡ LIVE TIP ALERT: ${amountStr} for @${cleanHandle}!`,
+      title,
       description: `**${supporter}** just dropped an **${theme.toUpperCase()} AURA** tip with 60 FPS live stream alert!`,
       color,
       fields: [
         { name: "Supporter", value: supporter, inline: true },
         { name: "Amount", value: `${amountStr} (${tip.currency || 'INR'})`, inline: true },
         { name: "Aura Tier", value: `${theme.toUpperCase()} ⚡ (${tip.durationSec || 8}s)`, inline: true },
-        { name: "Message", value: tip.message ? `"${tip.message}"` : "_No message included_", inline: false },
-        { name: "Stream Goal", value: `${progress} (₹${goalRaised.toLocaleString('en-IN')} / ₹${goalTarget.toLocaleString('en-IN')})`, inline: false }
+        { name: "Message", value: tip.message ? `"${tip.message}"` : "_No message included_", inline: false }
       ],
       footer: { text: "AuraTip Real-Time Stream Engine • 60 FPS Alerts" },
       timestamp: new Date().toISOString()
     };
 
+    if (conf.showProgressBar !== false) {
+      embed.fields.push({
+        name: "Stream Goal",
+        value: `${progress} (₹${goalRaised.toLocaleString('en-IN')} / ₹${goalTarget.toLocaleString('en-IN')})`,
+        inline: false
+      });
+    }
+
     const payload = {
-      content: `🎉 **New Live Tip Alert for @${cleanHandle}!**`,
+      content: `${mentionPrefix}🎉 **New Live Tip Alert for @${cleanHandle}!**`,
       embeds: [embed],
       components: [
         {
@@ -1035,14 +1148,273 @@ class AuraTipDiscordBot {
     };
 
     try {
-      if (this.token && this.channelId) {
-        await this.sendChannelMessage(this.channelId, payload);
+      if (this.token && targetChannel) {
+        const res = await this.sendChannelMessage(targetChannel, payload);
+        this.recordDispatch({ type: 'TIP_ALERT', ...res, target: `#${targetChannel}`, handle: cleanHandle, amount });
       } else if (this.webhookUrl) {
         await this.sendWebhook(this.webhookUrl, payload);
       }
     } catch (err) {
       console.warn('[DiscordBot] broadcastTipAlert warning:', err.message);
     }
+  }
+
+  // Goal Celebrations Broadcast to dedicated channel
+  async broadcastGoalCelebration(creator, goal) {
+    if (!this.token && !this.webhookUrl) return;
+    const routing = this.getRoutingConfig();
+    const conf = routing.goal_celebrations || DEFAULT_ROUTING.goal_celebrations;
+    if (conf.enabled === false) return;
+
+    const targetChannel = conf.channelId || this.channelId;
+    if (!targetChannel) return;
+
+    const cleanHandle = (creator?.handle || 'creator').toLowerCase().replace(/^@/, '');
+    const color = conf.color ? parseInt(conf.color.replace('#', ''), 16) : 0xF59E0B;
+    const mentionPrefix = this.buildMentionString(conf.mention);
+    const title = (conf.titleTemplate || '🎉 STREAM GOAL CRUSHED: @{creator} hit 100%!')
+      .replace('{creator}', cleanHandle)
+      .replace('{goal}', goal?.title || 'Milestone');
+
+    const embed = {
+      title,
+      description: `🏆 Huge congratulations to **${creator.displayName || cleanHandle}** (\`@${cleanHandle}\`) for achieving their stream target!`,
+      color,
+      fields: [
+        { name: "Target Amount", value: `₹${(goal?.targetAmount || creator?.goalTargetInr || 10000).toLocaleString('en-IN')}`, inline: true },
+        { name: "Raised", value: `₹${(goal?.currentAmount || creator?.goalRaisedInr || 10000).toLocaleString('en-IN')}`, inline: true },
+        { name: "Status", value: "🌟 **GOAL COMPLETED (100%)**", inline: true }
+      ],
+      footer: { text: "AuraTip Milestones • Live Stream Celebrations" },
+      timestamp: new Date().toISOString()
+    };
+
+    const payload = {
+      content: `${mentionPrefix}🥳 **GOAL COMPLETED!** Let's celebrate in the chat!`,
+      embeds: [embed],
+      components: [{
+        type: 1,
+        components: [{
+          type: 2,
+          style: 5,
+          label: `📺 Watch @${cleanHandle}`,
+          url: `https://auratip.live/@${cleanHandle}`
+        }]
+      }]
+    };
+
+    try {
+      const res = await this.sendChannelMessage(targetChannel, payload);
+      this.recordDispatch({ type: 'GOAL_CELEBRATION', ...res, target: `#${targetChannel}`, handle: cleanHandle });
+      return res;
+    } catch (err) {
+      console.warn('[DiscordBot] broadcastGoalCelebration error:', err.message);
+    }
+  }
+
+  // Stream Boost Broadcast to dedicated channel
+  async broadcastStreamBoost(creator) {
+    if (!this.token) return;
+    const routing = this.getRoutingConfig();
+    const conf = routing.creator_boosts || DEFAULT_ROUTING.creator_boosts;
+    if (conf.enabled === false) return;
+
+    const targetChannel = conf.channelId || this.channelId;
+    if (!targetChannel) return;
+
+    const cleanHandle = (creator?.handle || 'creator').toLowerCase().replace(/^@/, '');
+    const color = conf.color ? parseInt(conf.color.replace('#', ''), 16) : 0x8B5CF6;
+    const mentionPrefix = this.buildMentionString(conf.mention);
+
+    const embed = {
+      title: `🔥 STREAM BOOST ACTIVE: @${cleanHandle} is Live!`,
+      description: `**${creator.displayName || cleanHandle}** just received a **Platform Boost**! Catch the stream right now on AuraTip.`,
+      color,
+      fields: [
+        { name: "Category", value: creator.category || 'Live Streaming', inline: true },
+        { name: "Platform Rank", value: "Featured Creator ⭐", inline: true }
+      ],
+      footer: { text: "AuraTip Creator Spotlight" },
+      timestamp: new Date().toISOString()
+    };
+
+    const payload = {
+      content: `${mentionPrefix}🚀 **Streamer Boosted on AuraTip!**`,
+      embeds: [embed],
+      components: [{
+        type: 1,
+        components: [{
+          type: 2,
+          style: 5,
+          label: `⚡ Watch & Tip @${cleanHandle}`,
+          url: `https://auratip.live/@${cleanHandle}`
+        }]
+      }]
+    };
+
+    try {
+      const res = await this.sendChannelMessage(targetChannel, payload);
+      this.recordDispatch({ type: 'CREATOR_BOOST', ...res, target: `#${targetChannel}`, handle: cleanHandle });
+      return res;
+    } catch (err) {
+      console.warn('[DiscordBot] broadcastStreamBoost error:', err.message);
+    }
+  }
+
+  // Official Platform Announcement Broadcast
+  async broadcastPlatformNotice(title, message, options = {}) {
+    if (!this.token) return;
+    const routing = this.getRoutingConfig();
+    const conf = routing.platform_broadcasts || DEFAULT_ROUTING.platform_broadcasts;
+    if (conf.enabled === false) return;
+
+    const targetChannel = conf.channelId || this.channelId;
+    if (!targetChannel) return;
+
+    const color = conf.color ? parseInt(conf.color.replace('#', ''), 16) : 0xEC4899;
+    const mentionPrefix = this.buildMentionString(conf.mention);
+
+    const embed = {
+      title: title || conf.titleTemplate || '📢 AuraTip Official Announcement',
+      description: message || 'Platform maintenance or notice update.',
+      color,
+      fields: options.fields || [],
+      footer: { text: "AuraTip Operations Hub" },
+      timestamp: new Date().toISOString()
+    };
+
+    const payload = {
+      content: `${mentionPrefix}📢 **AuraTip Network Announcement**`,
+      embeds: [embed]
+    };
+
+    try {
+      const res = await this.sendChannelMessage(targetChannel, payload);
+      this.recordDispatch({ type: 'PLATFORM_BROADCAST', ...res, target: `#${targetChannel}` });
+      return res;
+    } catch (err) {
+      console.warn('[DiscordBot] broadcastPlatformNotice error:', err.message);
+      throw err;
+    }
+  }
+
+  // Security / Audit alert broadcast to dedicated admin channel
+  async broadcastAuditAlert(event, details = {}) {
+    if (!this.token) return;
+    const routing = this.getRoutingConfig();
+    const conf = routing.audit_alerts || DEFAULT_ROUTING.audit_alerts;
+    if (conf.enabled === false) return;
+
+    const targetChannel = conf.channelId || this.channelId;
+    if (!targetChannel) return;
+
+    const color = conf.color ? parseInt(conf.color.replace('#', ''), 16) : 0xEF4444;
+    const mentionPrefix = this.buildMentionString(conf.mention);
+
+    const embed = {
+      title: `⚠️ [ADMIN AUDIT] ${event}`,
+      description: typeof details === 'string' ? details : JSON.stringify(details, null, 2).slice(0, 1000),
+      color,
+      footer: { text: "AuraTip Master Control Telemetry" },
+      timestamp: new Date().toISOString()
+    };
+
+    try {
+      const res = await this.sendChannelMessage(targetChannel, {
+        content: `${mentionPrefix}🚨 **Platform Security / Telemetry Alert**`,
+        embeds: [embed]
+      });
+      this.recordDispatch({ type: 'AUDIT_ALERT', ...res, target: `#${targetChannel}`, event });
+      return res;
+    } catch (err) {
+      console.warn('[DiscordBot] broadcastAuditAlert error:', err.message);
+    }
+  }
+
+  // Test Channel Routing for any category
+  async testChannelRouting(category) {
+    const routing = this.getRoutingConfig();
+    const conf = routing[category];
+    if (!conf) throw new Error(`Unknown routing category: ${category}`);
+    if (!conf.channelId) throw new Error(`No channel configured for category "${category}". Please select a channel first.`);
+
+    const color = conf.color ? parseInt(conf.color.replace('#', ''), 16) : 0x00F0FF;
+
+    const samples = {
+      tip_alerts: {
+        title: "⚡ [TEST] Live Tip Alert: ₹500 for @ANSH!",
+        desc: "**Demon Supporter** dropped an **EMERALD AURA** tip with 60 FPS alert!",
+        fields: [
+          { name: "Supporter", value: "Demon King", inline: true },
+          { name: "Amount", value: "₹500 (INR)", inline: true },
+          { name: "Aura Tier", value: "EMERALD ⚡", inline: true },
+          { name: "Message", value: "\"Keep streaming bro, you're the GOAT!\"", inline: false }
+        ]
+      },
+      goal_celebrations: {
+        title: "🎉 [TEST] Stream Goal Crushed: @ANSH hit 100%!",
+        desc: "The streamer hit their ₹25,000 upgrade goal milestone!",
+        fields: [
+          { name: "Goal Target", value: "₹25,000", inline: true },
+          { name: "Current Raised", value: "₹25,400", inline: true },
+          { name: "Progress", value: "`[██████████]` 100%", inline: false }
+        ]
+      },
+      creator_onboarding: {
+        title: "🚀 [TEST] Welcome @ANSH to the AuraTip Partner Fleet!",
+        desc: "Streamer application approved! Profile and 60 FPS tipping engine are now live.",
+        fields: [
+          { name: "Handle", value: "@ansh", inline: true },
+          { name: "Channel", value: "https://auratip.live/@ansh", inline: true }
+        ]
+      },
+      creator_boosts: {
+        title: "🔥 [TEST] Stream Boost Active: @ANSH is live!",
+        desc: "Streamer has been promoted to the AuraTip Front Page!",
+        fields: [
+          { name: "Category", value: "Gaming / Valorant", inline: true },
+          { name: "Status", value: "Featured Live Stream ⭐", inline: true }
+        ]
+      },
+      platform_broadcasts: {
+        title: "📢 [TEST] AuraTip Official Platform Notice",
+        desc: "This is a verified test dispatch for the official announcements channel.",
+        fields: [
+          { name: "Engine Version", value: "v3.0 Ultra", inline: true },
+          { name: "Payout Speed", value: "Instant UPI Payouts", inline: true }
+        ]
+      },
+      audit_alerts: {
+        title: "⚠️ [TEST] AuraTip Security & Audit Log Alert",
+        desc: "Diagnostic test alert sent to verify the dedicated admin log channel routing.",
+        fields: [
+          { name: "Event Type", value: "DIAGNOSTIC_VERIFICATION", inline: true },
+          { name: "Severity", value: "INFO", inline: true }
+        ]
+      }
+    };
+
+    const sample = samples[category] || {
+      title: `⚡ [TEST] Channel Routing Verification for ${category}`,
+      desc: "This is a test embed to verify channel delivery.",
+      fields: []
+    };
+
+    const payload = {
+      content: `🧪 **Test Dispatch: ${category.toUpperCase().replace(/_/g, ' ')}** (Channel Routing Verification)`,
+      embeds: [{
+        title: sample.title,
+        description: sample.desc,
+        color,
+        fields: sample.fields,
+        footer: { text: "AuraTip Bot • Channel Routing Test" },
+        timestamp: new Date().toISOString()
+      }]
+    };
+
+    const res = await this.sendChannelMessage(conf.channelId, payload);
+    this.recordDispatch({ type: `TEST_${category.toUpperCase()}`, ...res, target: `#${conf.channelId}` });
+    return res;
   }
 
   // High-Level Automated Dispatcher for Streamer Onboarding (Strictly Personal DMs for privacy)
@@ -1095,10 +1467,21 @@ class AuraTipDiscordBot {
         this.recordDispatch({ type: 'DISCORD', ...deliveryResult, handle, displayName: creator.displayName });
 
         // Optional non-sensitive public celebration announcement to the server channel (WITHOUT keys or passwords)
-        if (this.channelId) {
+        const routing = this.getRoutingConfig();
+        const onbConf = routing.creator_onboarding || DEFAULT_ROUTING.creator_onboarding;
+        const announceChannel = onbConf.channelId || this.channelId;
+        if (onbConf.enabled !== false && onbConf.sendPublicAnnouncement !== false && announceChannel) {
           try {
-            await this.sendChannelMessage(this.channelId, {
-              content: `🎉 **New Streamer Verified!** Welcome **${creator.displayName}** (\`@${handle}\`) to the AuraTip Partner Fleet! 🚀\n🔗 Public Tipping Page: https://auratip.live/@${handle}`
+            const color = onbConf.color ? parseInt(onbConf.color.replace('#', ''), 16) : 0x00F0FF;
+            await this.sendChannelMessage(announceChannel, {
+              content: `🎉 **New Streamer Verified!** Welcome **${creator.displayName}** (\`@${handle}\`) to the AuraTip Partner Fleet! 🚀`,
+              embeds: [{
+                title: `🚀 ${creator.displayName} is now Live on AuraTip!`,
+                description: `Support **${creator.displayName}** with 60 FPS animated alerts & instant UPI tipping!\n\n🔗 **Public Tipping Link**: https://auratip.live/@${handle}`,
+                color,
+                footer: { text: "AuraTip Streamer Elite" },
+                timestamp: new Date().toISOString()
+              }]
             });
           } catch (annErr) {}
         }
