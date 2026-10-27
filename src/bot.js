@@ -66,6 +66,13 @@ const DEFAULT_ROUTING = {
     color: '#EF4444',
     mention: 'none',
     titleTemplate: '⚠️ AuraTip Security / System Alert'
+  },
+  support_tickets: {
+    enabled: true,
+    channelId: process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670',
+    color: '#00F0FF',
+    mention: 'none',
+    titleTemplate: '🎫 Support Ticket: {ticketId}'
   }
 };
 
@@ -450,6 +457,107 @@ class AuraTipDiscordBot {
         description: 'Get the official Se7en Kingdom Discord invite for creator discussions'
       },
       {
+        name: 'ticket',
+        description: 'AuraTip Support Ticket System: create, view, resolve, or list tickets',
+        options: [
+          {
+            name: 'create',
+            description: 'Open a new support ticket linked to AuraTip',
+            type: 1,
+            options: [
+              {
+                name: 'subject',
+                description: 'Brief summary of the issue or inquiry',
+                type: 3,
+                required: true
+              },
+              {
+                name: 'message',
+                description: 'Detailed explanation of your inquiry or problem',
+                type: 3,
+                required: true
+              },
+              {
+                name: 'category',
+                description: 'Select issue category',
+                type: 3,
+                required: false,
+                choices: [
+                  { name: 'Payment / UPI Issue', value: 'PAYMENT_ISSUE' },
+                  { name: 'OBS / Overlay Setup', value: 'OVERLAY_ISSUE' },
+                  { name: 'Creator Onboarding / Verification', value: 'CREATOR_ONBOARDING' },
+                  { name: 'Technical Glitch', value: 'TECHNICAL_GLITCH' },
+                  { name: 'General Inquiry', value: 'GENERAL_INQUIRY' }
+                ]
+              },
+              {
+                name: 'creator_handle',
+                description: 'Related streamer handle (if applicable)',
+                type: 3,
+                required: false
+              },
+              {
+                name: 'order_id',
+                description: 'Related Order ID or UPI UTR reference (if applicable)',
+                type: 3,
+                required: false
+              }
+            ]
+          },
+          {
+            name: 'view',
+            description: 'Check status and admin response of a support ticket',
+            type: 1,
+            options: [
+              {
+                name: 'ticket_id',
+                description: 'The Ticket ID (e.g. AT-VW-12345 or AT-DC-54321)',
+                type: 3,
+                required: true
+              }
+            ]
+          },
+          {
+            name: 'resolve',
+            description: 'Resolve a ticket with an official staff response',
+            type: 1,
+            options: [
+              {
+                name: 'ticket_id',
+                description: 'The Ticket ID to resolve',
+                type: 3,
+                required: true
+              },
+              {
+                name: 'reply',
+                description: 'Resolution notes or explanation for the ticket submitter',
+                type: 3,
+                required: true
+              }
+            ]
+          },
+          {
+            name: 'list',
+            description: 'List recent active or resolved support tickets',
+            type: 1,
+            options: [
+              {
+                name: 'status',
+                description: 'Filter tickets by status (default: OPEN)',
+                type: 3,
+                required: false,
+                choices: [
+                  { name: 'Open', value: 'OPEN' },
+                  { name: 'In Progress', value: 'IN_PROGRESS' },
+                  { name: 'Resolved', value: 'RESOLVED' },
+                  { name: 'All', value: 'ALL' }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
         name: 'help',
         description: 'View AuraTip bot commands and creator links'
       }
@@ -465,22 +573,187 @@ class AuraTipDiscordBot {
         body: JSON.stringify(commands)
       });
       if (res.ok) {
-        console.log('[AuraTip DC Bot] Minimal required commands registered: /ping, /streamer, /approve, /kingdom, /help');
+        console.log('[AuraTip DC Bot] Required commands registered: /ping, /streamer, /approve, /kingdom, /ticket, /help');
       }
     } catch (e) {
       console.warn('[AuraTip DC Bot] Slash commands notice:', e.message);
     }
   }
 
-  // Handle Slash Command Interactions
+  // Handle Slash Command & Button Component Interactions
   async handleInteraction(interaction) {
-    const { id, token, data } = interaction;
+    const { id, token, data, type } = interaction;
     const commandName = data?.name;
+    const customId = data?.custom_id;
+    const user = interaction.member?.user || interaction.user || {};
+    const username = user.username || 'Discord User';
 
     try {
       let responsePayload = {};
 
-      if (commandName === 'ping') {
+      // 1. Handle Button Message Component Interactions (Type 3)
+      if (type === 3 || customId) {
+        if (customId && customId.startsWith('ticket_resolve_')) {
+          const ticketId = customId.replace('ticket_resolve_', '').trim().toUpperCase();
+          let existing = null;
+          if (this.prisma) {
+            existing = await this.prisma.supportTicket.findUnique({
+              where: { ticketId }
+            }).catch(() => null);
+          }
+
+          if (!existing) {
+            responsePayload = {
+              type: 4,
+              data: {
+                flags: 64, // Ephemeral
+                content: `❌ Could not locate ticket \`${ticketId}\` in the AuraTip database.`
+              }
+            };
+          } else {
+            const updated = await this.prisma.supportTicket.update({
+              where: { ticketId },
+              data: {
+                status: 'RESOLVED',
+                adminUser: `@${username} (Discord Quick Action)`,
+                adminReply: existing.adminReply || `Resolved directly via Discord quick action by @${username}`,
+                resolvedAt: new Date()
+              }
+            }).catch(err => {
+              console.warn('[Button Interaction] Resolve error:', err.message);
+              return null;
+            });
+
+            if (updated) {
+              try {
+                await this.prisma.adminAuditLog.create({
+                  data: {
+                    action: 'SUPPORT_TICKET_RESOLVED_DISCORD_BUTTON',
+                    targetHandle: updated.creatorHandle || updated.email,
+                    adminUser: `@${username} (Discord)`,
+                    adminIp: 'Discord Component Interaction',
+                    details: JSON.stringify({ ticketId, resolvedBy: username })
+                  }
+                });
+              } catch (e) {}
+
+              responsePayload = {
+                type: 7, // UPDATE_MESSAGE: updates original embed with resolution badge
+                data: {
+                  embeds: [{
+                    title: `✅ Ticket Resolved: ${ticketId}`,
+                    url: `https://auratip.live/contact?ticket=${ticketId}`,
+                    description: `This support ticket has been resolved by **@${username}**.\n\n**Subject:** ${updated.subject}\n**Submitter:** ${updated.name} (\`${updated.email}\`)\n**Inquiry:**\n${updated.message.substring(0, 450)}${updated.message.length > 450 ? '...' : ''}`,
+                    fields: [
+                      { name: "🎫 Ticket ID", value: `\`${ticketId}\``, inline: true },
+                      { name: "📊 Status", value: "🟢 `RESOLVED`", inline: true },
+                      { name: "🛡️ Resolved By", value: `@${username}`, inline: true },
+                      { name: "📂 Category", value: `\`${updated.category.replace(/_/g, ' ')}\``, inline: true },
+                      { name: "💬 Resolution Note", value: updated.adminReply || 'Resolved via Discord quick action', inline: false }
+                    ],
+                    color: 0x10B981,
+                    footer: { text: "AuraTip Helpdesk • Live Sync" },
+                    timestamp: new Date().toISOString()
+                  }],
+                  components: [
+                    {
+                      type: 1,
+                      components: [
+                        {
+                          type: 2,
+                          style: 5,
+                          label: "🌐 View on AuraTip",
+                          url: `https://auratip.live/contact?ticket=${ticketId}`
+                        }
+                      ]
+                    }
+                  ]
+                }
+              };
+            } else {
+              responsePayload = {
+                type: 4,
+                data: { flags: 64, content: `❌ Failed to resolve ticket \`${ticketId}\` in database.` }
+              };
+            }
+          }
+        } else if (customId && customId.startsWith('ticket_progress_')) {
+          const ticketId = customId.replace('ticket_progress_', '').trim().toUpperCase();
+          let existing = null;
+          if (this.prisma) {
+            existing = await this.prisma.supportTicket.findUnique({
+              where: { ticketId }
+            }).catch(() => null);
+          }
+
+          if (!existing) {
+            responsePayload = {
+              type: 4,
+              data: {
+                flags: 64,
+                content: `❌ Could not locate ticket \`${ticketId}\` in the AuraTip database.`
+              }
+            };
+          } else {
+            const updated = await this.prisma.supportTicket.update({
+              where: { ticketId },
+              data: {
+                status: 'IN_PROGRESS',
+                adminUser: `@${username} (Discord Quick Action)`
+              }
+            }).catch(err => {
+              console.warn('[Button Interaction] Progress error:', err.message);
+              return null;
+            });
+
+            if (updated) {
+              responsePayload = {
+                type: 7, // UPDATE_MESSAGE
+                data: {
+                  embeds: [{
+                    title: `⚡ Ticket In Progress: ${ticketId}`,
+                    url: `https://auratip.live/contact?ticket=${ticketId}`,
+                    description: `This ticket is actively being reviewed by **@${username}**.\n\n**Subject:** ${updated.subject}\n**Submitter:** ${updated.name} (\`${updated.email}\`)\n**Inquiry:**\n${updated.message.substring(0, 450)}${updated.message.length > 450 ? '...' : ''}`,
+                    fields: [
+                      { name: "🎫 Ticket ID", value: `\`${ticketId}\``, inline: true },
+                      { name: "📊 Status", value: "🔵 `IN_PROGRESS`", inline: true },
+                      { name: "🛡️ Handled By", value: `@${username}`, inline: true },
+                      { name: "📂 Category", value: `\`${updated.category.replace(/_/g, ' ')}\``, inline: true }
+                    ],
+                    color: 0x3B82F6,
+                    footer: { text: "AuraTip Helpdesk • Live Sync" },
+                    timestamp: new Date().toISOString()
+                  }],
+                  components: [
+                    {
+                      type: 1,
+                      components: [
+                        {
+                          type: 2,
+                          style: 5,
+                          label: "🌐 View on AuraTip",
+                          url: `https://auratip.live/contact?ticket=${ticketId}`
+                        },
+                        {
+                          type: 2,
+                          style: 3,
+                          label: "✅ Mark Resolved",
+                          custom_id: `ticket_resolve_${ticketId}`
+                        }
+                      ]
+                    }
+                  ]
+                }
+              };
+            } else {
+              responsePayload = {
+                type: 4,
+                data: { flags: 64, content: `❌ Failed to update ticket \`${ticketId}\` in database.` }
+              };
+            }
+          }
+        }
+      } else if (commandName === 'ping') {
         const uptimeSec = this.startTime ? Math.round((Date.now() - this.startTime) / 1000) : 0;
         const mins = Math.floor(uptimeSec / 60);
         responsePayload = {
@@ -716,6 +989,387 @@ class AuraTipDiscordBot {
             ]
           }
         };
+      } else if (commandName === 'ticket') {
+        const subCmdObj = data.options?.find(o => o.type === 1);
+        const subCommand = subCmdObj ? subCmdObj.name : (data.options?.[0]?.name || 'help');
+        const subOptions = subCmdObj?.options || [];
+        const getOpt = (optName) => {
+          const inSub = subOptions.find(o => o.name === optName);
+          if (inSub) return inSub.value;
+          return data.options?.find(o => o.name === optName)?.value;
+        };
+
+        if (subCommand === 'create') {
+          const subject = String(getOpt('subject') || '').trim();
+          const message = String(getOpt('message') || '').trim();
+          const category = String(getOpt('category') || 'GENERAL_INQUIRY').trim();
+          const creatorHandle = getOpt('creator_handle') ? String(getOpt('creator_handle')).trim().replace(/^@/, '').toLowerCase() : null;
+          const orderId = getOpt('order_id') ? String(getOpt('order_id')).trim() : null;
+
+          if (!subject || subject.length < 3) {
+            responsePayload = {
+              type: 4,
+              data: { flags: 64, content: "❌ Subject must be at least 3 characters." }
+            };
+          } else if (!message || message.length < 10) {
+            responsePayload = {
+              type: 4,
+              data: { flags: 64, content: "❌ Message must be at least 10 characters." }
+            };
+          } else {
+            const randNum = Math.floor(10000 + Math.random() * 90000);
+            const ticketId = `AT-DC-${randNum}`;
+
+            let userType = 'VIEWER';
+            let associatedCreator = creatorHandle;
+            if (this.prisma) {
+              const matchedCreator = await this.prisma.creator.findFirst({
+                where: {
+                  OR: [
+                    { discord: username },
+                    { handle: username.toLowerCase() }
+                  ]
+                }
+              }).catch(() => null);
+              if (matchedCreator) {
+                userType = 'CREATOR';
+                if (!associatedCreator) associatedCreator = matchedCreator.handle;
+              }
+            }
+
+            const cleanEmail = `${username.toLowerCase().replace(/[^a-z0-9_]/g, '')}@discord.user`;
+
+            let newTicket = null;
+            if (this.prisma) {
+              newTicket = await this.prisma.supportTicket.create({
+                data: {
+                  ticketId,
+                  userType,
+                  name: `@${username} (Discord)`,
+                  email: cleanEmail,
+                  creatorHandle: associatedCreator,
+                  orderId,
+                  category,
+                  priority: 'STANDARD',
+                  subject,
+                  message,
+                  status: 'OPEN'
+                }
+              }).catch(err => {
+                console.warn('[Ticket Command] Create error:', err.message);
+                return null;
+              });
+            }
+
+            if (!newTicket) {
+              responsePayload = {
+                type: 4,
+                data: { flags: 64, content: "❌ Failed to create ticket in database. Please try again or visit https://auratip.live/contact" }
+              };
+            } else {
+              // Dispatch ticket alert to staff support channel with action buttons
+              this.dispatchTicketEmbed(newTicket).catch(e => {
+                console.warn('[DiscordBot] Ticket alert dispatch error:', e.message);
+              });
+
+              const webTrackerUrl = `https://auratip.live/contact?ticket=${ticketId}`;
+
+              responsePayload = {
+                type: 4,
+                data: {
+                  embeds: [{
+                    title: `🎫 Support Ticket Created: ${ticketId}`,
+                    url: webTrackerUrl,
+                    description: `Thank you, **@${username}**! Your ticket has been logged directly into the AuraTip support database.\nOur team will review your inquiry shortly.`,
+                    fields: [
+                      { name: "🎫 Ticket ID", value: `\`${ticketId}\``, inline: true },
+                      { name: "📂 Category", value: `\`${category.replace(/_/g, ' ')}\``, inline: true },
+                      { name: "📊 Status", value: "🟡 `OPEN`", inline: true },
+                      { name: "📝 Subject", value: `**${subject}**`, inline: false },
+                      { name: "💬 Your Message", value: message.length > 500 ? message.substring(0, 500) + '...' : message, inline: false },
+                      { name: "🌐 Real-Time Web Tracker", value: `[Check Ticket on AuraTip](${webTrackerUrl})\nOr check anytime with \`/ticket view ticket_id:${ticketId}\``, inline: false }
+                    ],
+                    color: 0x06B6D4,
+                    footer: { text: "AuraTip Support Desk • Se7en Kingdom" },
+                    timestamp: new Date().toISOString()
+                  }],
+                  components: [
+                    {
+                      type: 1,
+                      components: [
+                        {
+                          type: 2,
+                          style: 5,
+                          label: "🌐 Track on AuraTip Web",
+                          url: webTrackerUrl
+                        }
+                      ]
+                    }
+                  ]
+                }
+              };
+            }
+          }
+        } else if (subCommand === 'view') {
+          const ticketIdInput = String(getOpt('ticket_id') || '').trim().toUpperCase();
+          let ticket = null;
+          if (this.prisma && ticketIdInput) {
+            ticket = await this.prisma.supportTicket.findFirst({
+              where: {
+                OR: [
+                  { ticketId: ticketIdInput },
+                  { ticketId: ticketIdInput.startsWith('AT-') ? ticketIdInput : `AT-${ticketIdInput}` }
+                ]
+              }
+            }).catch(() => null);
+          }
+
+          if (!ticket) {
+            responsePayload = {
+              type: 4,
+              data: {
+                embeds: [{
+                  title: "❌ Ticket Not Found",
+                  description: `Could not locate any support ticket with ID \`${ticketIdInput}\`.\nPlease verify your ticket ID (e.g. \`AT-VW-12345\` or \`AT-DC-54321\`) or check on the [AuraTip Contact Page](https://auratip.live/contact).`,
+                  color: 0xEF4444
+                }]
+              }
+            };
+          } else {
+            const statusColor = ticket.status === 'RESOLVED' ? 0x10B981 : (ticket.status === 'IN_PROGRESS' ? 0x3B82F6 : 0xF59E0B);
+            const statusIcon = ticket.status === 'RESOLVED' ? '🟢' : (ticket.status === 'IN_PROGRESS' ? '🔵' : '🟡');
+            const trackerUrl = `https://auratip.live/contact?ticket=${ticket.ticketId}`;
+
+            const fields = [
+              { name: "🎫 Ticket ID", value: `\`${ticket.ticketId}\``, inline: true },
+              { name: "📊 Status", value: `${statusIcon} **${ticket.status}**`, inline: true },
+              { name: "📂 Category", value: `\`${ticket.category.replace(/_/g, ' ')}\``, inline: true },
+              { name: "👤 Submitter", value: `${ticket.name} (\`${ticket.userType}\`)`, inline: true },
+              { name: "⚡ Priority", value: ticket.priority === 'URGENT' ? '🚨 URGENT' : '🟢 Standard', inline: true },
+              { name: "📅 Submitted", value: `<t:${Math.floor(new Date(ticket.createdAt).getTime() / 1000)}:R>`, inline: true },
+              { name: "📝 Subject", value: `**${ticket.subject}**`, inline: false },
+              { name: "💬 Message", value: ticket.message.length > 500 ? ticket.message.substring(0, 500) + '...' : ticket.message, inline: false }
+            ];
+
+            if (ticket.adminReply) {
+              fields.push({
+                name: "💬 Support Team Response",
+                value: `**${ticket.adminReply}**\n*(Replied by ${ticket.adminUser || 'Support Team'})*`,
+                inline: false
+              });
+            }
+
+            const components = [
+              {
+                type: 1,
+                components: [
+                  {
+                    type: 2,
+                    style: 5,
+                    label: "🌐 View on AuraTip",
+                    url: trackerUrl
+                  }
+                ]
+              }
+            ];
+
+            if (ticket.status !== 'RESOLVED') {
+              components[0].components.push({
+                type: 2,
+                style: 3,
+                label: "✅ Mark Resolved",
+                custom_id: `ticket_resolve_${ticket.ticketId}`
+              });
+            }
+
+            responsePayload = {
+              type: 4,
+              data: {
+                embeds: [{
+                  title: `🎫 Ticket Details: ${ticket.ticketId}`,
+                  url: trackerUrl,
+                  color: statusColor,
+                  fields,
+                  footer: { text: "AuraTip Helpdesk Live Tracking" },
+                  timestamp: new Date().toISOString()
+                }],
+                components
+              }
+            };
+          }
+        } else if (subCommand === 'resolve') {
+          const ticketIdInput = String(getOpt('ticket_id') || '').trim().toUpperCase();
+          const reply = String(getOpt('reply') || '').trim();
+
+          if (!ticketIdInput) {
+            responsePayload = {
+              type: 4,
+              data: { flags: 64, content: "❌ Please provide a valid Ticket ID." }
+            };
+          } else if (!reply || reply.length < 3) {
+            responsePayload = {
+              type: 4,
+              data: { flags: 64, content: "❌ Please provide a meaningful resolution reply (at least 3 characters)." }
+            };
+          } else {
+            let ticket = null;
+            if (this.prisma) {
+              ticket = await this.prisma.supportTicket.findFirst({
+                where: {
+                  OR: [
+                    { ticketId: ticketIdInput },
+                    { ticketId: ticketIdInput.startsWith('AT-') ? ticketIdInput : `AT-${ticketIdInput}` }
+                  ]
+                }
+              }).catch(() => null);
+            }
+
+            if (!ticket) {
+              responsePayload = {
+                type: 4,
+                data: { flags: 64, content: `❌ Could not find ticket \`${ticketIdInput}\`.` }
+              };
+            } else {
+              const updated = await this.prisma.supportTicket.update({
+                where: { id: ticket.id },
+                data: {
+                  status: 'RESOLVED',
+                  adminReply: reply,
+                  adminUser: `@${username} (Discord)`,
+                  resolvedAt: new Date()
+                }
+              });
+
+              try {
+                await this.prisma.adminAuditLog.create({
+                  data: {
+                    action: 'SUPPORT_TICKET_RESOLVED_DISCORD_COMMAND',
+                    targetHandle: updated.creatorHandle || updated.email,
+                    adminUser: `@${username} (Discord)`,
+                    adminIp: 'Discord Bot Slash Command',
+                    details: JSON.stringify({ ticketId: updated.ticketId, reply, resolvedBy: username })
+                  }
+                });
+              } catch (e) {}
+
+              const trackerUrl = `https://auratip.live/contact?ticket=${updated.ticketId}`;
+
+              responsePayload = {
+                type: 4,
+                data: {
+                  embeds: [{
+                    title: `✅ Ticket Resolved: ${updated.ticketId}`,
+                    url: trackerUrl,
+                    description: `Support ticket **\`${updated.ticketId}\`** has been marked as **RESOLVED**.\nThe user can view this resolution immediately on AuraTip.`,
+                    fields: [
+                      { name: "🎫 Ticket ID", value: `\`${updated.ticketId}\``, inline: true },
+                      { name: "📊 Status", value: "🟢 `RESOLVED`", inline: true },
+                      { name: "🛡️ Resolved By", value: `@${username}`, inline: true },
+                      { name: "👤 Submitter", value: `${updated.name} (\`${updated.email}\`)`, inline: true },
+                      { name: "📝 Subject", value: `**${updated.subject}**`, inline: true },
+                      { name: "📂 Category", value: `\`${updated.category}\``, inline: true },
+                      { name: "💬 Resolution Reply", value: `**${reply}**`, inline: false }
+                    ],
+                    color: 0x10B981,
+                    footer: { text: "AuraTip Helpdesk Operations" },
+                    timestamp: new Date().toISOString()
+                  }],
+                  components: [
+                    {
+                      type: 1,
+                      components: [
+                        {
+                          type: 2,
+                          style: 5,
+                          label: "🌐 View on AuraTip",
+                          url: trackerUrl
+                        }
+                      ]
+                    }
+                  ]
+                }
+              };
+            }
+          }
+        } else if (subCommand === 'list') {
+          const statusFilter = String(getOpt('status') || 'OPEN').toUpperCase();
+          const where = {};
+          if (statusFilter !== 'ALL') {
+            where.status = statusFilter;
+          }
+
+          let tickets = [];
+          if (this.prisma) {
+            tickets = await this.prisma.supportTicket.findMany({
+              where,
+              orderBy: { createdAt: 'desc' },
+              take: 8
+            }).catch(() => []);
+          }
+
+          if (tickets.length === 0) {
+            responsePayload = {
+              type: 4,
+              data: {
+                embeds: [{
+                  title: `📋 Support Tickets (${statusFilter})`,
+                  description: `No support tickets found with status **\`${statusFilter}\`**. All clear! 🎉`,
+                  color: 0x10B981,
+                  timestamp: new Date().toISOString()
+                }]
+              }
+            };
+          } else {
+            const listFields = tickets.map(t => {
+              const icon = t.status === 'RESOLVED' ? '🟢' : (t.status === 'IN_PROGRESS' ? '🔵' : '🟡');
+              const timeAgo = `<t:${Math.floor(new Date(t.createdAt).getTime() / 1000)}:R>`;
+              return {
+                name: `${icon} [${t.ticketId}] ${t.subject.substring(0, 40)}`,
+                value: `👤 ${t.name} • \`${t.userType}\` • \`${t.category}\` • ${timeAgo}\n🔗 [View on Web](https://auratip.live/contact?ticket=${t.ticketId})`,
+                inline: false
+              };
+            });
+
+            responsePayload = {
+              type: 4,
+              data: {
+                embeds: [{
+                  title: `📋 AuraTip Support Tickets (${statusFilter})`,
+                  description: `Displaying the latest **${tickets.length}** tickets matching status filter \`${statusFilter}\`.`,
+                  fields: listFields,
+                  color: 0x06B6D4,
+                  footer: { text: "AuraTip Helpdesk • Type /ticket view <ticket_id> for full details" },
+                  timestamp: new Date().toISOString()
+                }],
+                components: [
+                  {
+                    type: 1,
+                    components: [
+                      {
+                        type: 2,
+                        style: 5,
+                        label: "🌐 Open AuraTip Helpdesk",
+                        url: "https://auratip.live/contact"
+                      }
+                    ]
+                  }
+                ]
+              }
+            };
+          }
+        } else {
+          // Subcommand fallback
+          responsePayload = {
+            type: 4,
+            data: {
+              embeds: [{
+                title: "🎫 AuraTip Ticket System Help",
+                description: "Available `/ticket` subcommands:\n\n• `/ticket create <subject> <message> [category] [creator_handle] [order_id]` — Open a new support ticket\n• `/ticket view <ticket_id>` — Check status and official response\n• `/ticket resolve <ticket_id> <reply>` — Mark ticket resolved with notes\n• `/ticket list [status]` — View open/resolved support tickets",
+                color: 0x06B6D4
+              }]
+            }
+          };
+        }
       } else if (commandName === 'help') {
         responsePayload = {
           type: 4,
@@ -727,7 +1381,8 @@ class AuraTipDiscordBot {
                 { name: "`/ping`", value: "Check bot latency, heartbeat, and gateway connection", inline: false },
                 { name: "`/streamer <handle>`", value: "Look up a creator profile, tipping link, and stream goal", inline: false },
                 { name: "`/approve <handle>`", value: "Approve a creator and automatically dispatch their onboarding credentials DM", inline: false },
-                { name: "`/kingdom`", value: "Official invite to the **Se7en Kingdom** Discord server for creator partnerships & discussions", inline: false }
+                { name: "`/kingdom`", value: "Official invite to the **Se7en Kingdom** Discord server for creator partnerships & discussions", inline: false },
+                { name: "`/ticket <create|view|resolve|list>`", value: "AuraTip Helpdesk Ticket System: submit a ticket, check live status, or resolve directly in Discord", inline: false }
               ],
               color: 0x06B6D4,
               footer: { text: "AuraTip • Se7en Kingdom Network" },
@@ -1627,6 +2282,122 @@ let deliveryResult = {
 
     this.recordDispatch({ type: 'DISCORD', ...deliveryResult, handle, displayName: creator.displayName });
     return deliveryResult;
+  }
+
+  // High-Level Automated Dispatcher for Support Tickets (Website <-> Discord Bot Linking)
+  async dispatchTicketEmbed(ticket) {
+    if (!ticket) return { success: false, reason: 'No ticket data provided' };
+
+    const routing = this.getRoutingConfig();
+    const supportConf = routing.support_tickets || DEFAULT_ROUTING.support_tickets || {};
+    const destChannelId = supportConf.channelId || routing.audit_alerts?.channelId || this.channelId || process.env.DISCORD_ONBOARDING_CHANNEL_ID || '741671980561858670';
+
+    const ticketId = ticket.ticketId || `AT-TICK-${Date.now()}`;
+    const isUrgent = String(ticket.priority || '').toUpperCase() === 'URGENT';
+    const color = isUrgent ? 0xEF4444 : 0x06B6D4;
+    const webUrl = `https://auratip.live/contact?ticket=${encodeURIComponent(ticketId)}`;
+    const categoryLabel = String(ticket.category || 'GENERAL_INQUIRY').replace(/_/g, ' ');
+
+    const fields = [
+      { name: "🎫 Ticket ID", value: `\`${ticketId}\``, inline: true },
+      { name: "👤 Submitter", value: `${ticket.name || 'Anonymous'} (\`${ticket.userType || 'VIEWER'}\`)`, inline: true },
+      { name: "📧 Email", value: `\`${ticket.email || 'N/A'}\``, inline: true },
+      { name: "📂 Category", value: `\`${categoryLabel}\``, inline: true },
+      { name: "⚡ Priority", value: isUrgent ? '🚨 **URGENT**' : '🟢 Standard', inline: true },
+      { name: "📊 Status", value: `🟡 **${ticket.status || 'OPEN'}**`, inline: true }
+    ];
+
+    if (ticket.creatorHandle) {
+      fields.push({
+        name: "🎮 Streamer Handle",
+        value: `[@${ticket.creatorHandle}](https://auratip.live/@${ticket.creatorHandle})`,
+        inline: true
+      });
+    }
+
+    if (ticket.orderId) {
+      fields.push({
+        name: "🧾 Order / UTR Ref",
+        value: `\`${ticket.orderId}\``,
+        inline: true
+      });
+    }
+
+    const embed = {
+      author: {
+        name: `AuraTip Helpdesk • Ticket ${ticketId}`,
+        icon_url: "https://cdn.discordapp.com/app-icons/1561385016766758973/99d05448ccd5619290467abdcc859763.png",
+        url: webUrl
+      },
+      title: `${isUrgent ? '🚨 [URGENT] ' : '🎫 '}New Ticket: ${ticket.subject || 'Support Request'}`,
+      url: webUrl,
+      description: `A new support ticket has been submitted on AuraTip and logged to the central database.\n\n**Inquiry Details:**\n${(ticket.message || '').substring(0, 1000)}${(ticket.message || '').length > 1000 ? '...' : ''}`,
+      color,
+      fields,
+      footer: {
+        text: "AuraTip Support Desk • Live Ticket System",
+        icon_url: "https://cdn.discordapp.com/app-icons/1561385016766758973/99d05448ccd5619290467abdcc859763.png"
+      },
+      timestamp: new Date().toISOString()
+    };
+
+    const payload = {
+      content: isUrgent ? `⚠️ <@&741671980561858670> **Urgent Support Ticket Received!**` : undefined,
+      embeds: [embed],
+      components: [
+        {
+          type: 1, // ActionRow
+          components: [
+            {
+              type: 2, // Button
+              style: 5, // Link
+              label: "🌐 View on AuraTip",
+              url: webUrl
+            },
+            {
+              type: 2, // Button
+              style: 3, // Success (Green)
+              label: "✅ Mark Resolved",
+              custom_id: `ticket_resolve_${ticketId}`
+            },
+            {
+              type: 2, // Button
+              style: 1, // Primary (Blurple)
+              label: "⚡ In Progress",
+              custom_id: `ticket_progress_${ticketId}`
+            }
+          ]
+        }
+      ]
+    };
+
+    let dispatchRes;
+    if (this.token && destChannelId) {
+      try {
+        dispatchRes = await this.sendChannelMessage(destChannelId, payload);
+      } catch (err) {
+        if (this.webhookUrl) {
+          dispatchRes = await this.sendWebhook(this.webhookUrl, payload);
+        } else {
+          console.warn('[DiscordBot] Ticket embed dispatch notice:', err.message);
+          dispatchRes = { success: false, method: 'ERROR', error: err.message };
+        }
+      }
+    } else if (this.webhookUrl) {
+      dispatchRes = await this.sendWebhook(this.webhookUrl, payload);
+    } else {
+      dispatchRes = { success: false, method: 'STANDBY', note: 'Discord Bot token/webhook not configured' };
+    }
+
+    this.recordDispatch({
+      type: 'SUPPORT_TICKET_DISPATCH',
+      ticketId,
+      status: dispatchRes?.success ? 'DELIVERED' : 'FAILED',
+      destChannelId,
+      ...dispatchRes
+    });
+
+    return dispatchRes;
   }
 }
 
